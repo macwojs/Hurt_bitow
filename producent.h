@@ -4,7 +4,6 @@
 #define _GNU_SOURCE
 
 #include "parse.h"
-#include "error_functions.h"
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -28,7 +28,7 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, float *spe
             }
         } else {
             *port = parsePort( argv[ optind ] );
-            address = parseAddress( argv[ optind ] );
+            memcpy(address, parseAddress( argv[ optind ] ), strlen(parseAddress( argv[ optind ] ))+1);
             optind++;
         }
     }

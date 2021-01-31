@@ -1,17 +1,9 @@
 #define _GNU_SOURCE
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "parse.h"
+
 #include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <stdint.h>
-#include <errno.h>
-#include <string.h>
-#include <poll.h>
-#include <time.h>
-#include <signal.h>
-#include <sys/timerfd.h>
 
 int readInput( int argc, char *argv[], char *address, uint16_t *port, float *speed );
 
@@ -31,30 +23,12 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, float *spe
         if (( c = getopt( argc, argv, "p:" )) != -1 ) {
             switch ( c ) {
                 case 'p':
-                    errno = 0;
-                    char *end;
-                    float value = strtof( optarg, &end );
-                    if ( errno == ERANGE || *end != '\0' ) {
-                        perror( "Parsing error(float)\n" );
-                        exit( EXIT_FAILURE );
-                    }
-                    *speed = value;
+                    *speed = parseFloat( optarg );
                     break;
             }
         } else {
-            char addr_port[22];
-            char delim[] = ":";
-            memcpy( addr_port, argv[ optind ], strlen( argv[ optind ] ) + 1 );
-            address = strtok( addr_port, delim );
-
-            char *end;
-            errno = 0;
-            long value = strtol( strtok(NULL, delim ), &end, 10 );
-            *port = ( int ) value;
-            if ( errno == ERANGE || *end != '\0' ) {
-                perror( "Parsing error(int)\n" );
-                exit( EXIT_FAILURE );
-            }
+            *port = parsePort( argv[ optind ] );
+            address = parseAddress( argv[ optind ] );
             optind++;
         }
     }

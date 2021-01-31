@@ -5,4 +5,4 @@ set(CMAKE_C_STANDARD 11)
 
 add_executable(Hurt_bitow_producent producent.c)
 
-add_executable(Hurt_bitow_klient producent.c)
+add_executable(Hurt_bitow_klient konsument.c)

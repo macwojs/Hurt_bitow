@@ -11,7 +11,7 @@ int main( int argc, char *argv[] ) {
 
     int epoll_fd = createEpoll( soc_fd );
 
-    int pipe_fd = forkProduce();
+    int pipe_fd = forkProduce( speed );
 
     handleConnection( soc_fd, epoll_fd, pipe_fd );
 
@@ -22,7 +22,7 @@ int main( int argc, char *argv[] ) {
     return 0;
 }
 
-int forkProduce() {
+int forkProduce( float rate ) {
     int pipe_fd[2];
     if ( pipe( pipe_fd ) == -1 ) {
         perror( "Can't create pipe" );
@@ -31,11 +31,51 @@ int forkProduce() {
 
     int child = fork();
     if ( child == 0 ) {
-        //TODO: obsluga magazynu
+        signal( SIGPIPE, SIG_IGN);
+        close( pipe_fd[ 0 ] );
+
+        produce( pipe_fd[ 1 ], rate );
+
+        close( pipe_fd[ 1 ] );
+        exit( EXIT_SUCCESS );
     }
 
     close( pipe_fd[ 1 ] );
     return pipe_fd[ 0 ];
+}
+
+void produce( int pipe, float rate ) {
+    char data[640] = {};
+    char current_char = 'a';
+
+    struct timespec ts = {};
+    size_t sleep_ns = 640 / ( rate * 2662 ) * 1e9;
+    ts.tv_sec = sleep_ns / 1e9;
+    ts.tv_nsec = sleep_ns % ( size_t ) ( 1e9 );
+
+    for ( ;; ) {
+        for ( size_t i = 0; i < 640; ++i ) {
+            data[ i ] = current_char;
+        }
+
+        int write_data = write( pipe, data, 640 );
+        if ( write_data == -1 ) {
+            if(errno == EPIPE){
+                return;
+            }
+            perror( "Can't write data to pipe" );
+            exit( EXIT_FAILURE );
+        }
+
+        if(current_char == 'z')
+            current_char = 'A';
+        else if(current_char == 'Z')
+            current_char = 'a';
+        else
+            ++current_char;
+
+        nanosleep(&ts, NULL);
+    }
 }
 
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
@@ -95,7 +135,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 int write_sock = write( evlist[ i ].data.fd, read_buffer, sizeof( read_buffer ));
                 if ( write_sock == -1 ) {
                     //TODO: Handle disconected client
-                } else if ( write_sock < 13312 ){
+                } else if ( write_sock < 13312 ) {
                     //TODO: Handle disconected client
                 }
 

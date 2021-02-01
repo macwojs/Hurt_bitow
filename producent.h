@@ -29,7 +29,9 @@ int createServer( char *address, uint16_t port );
 
 int createEpoll( int soc_fd );
 
-int forkProduce();
+int forkProduce(float rate);
+
+void produce(int pipe, float rate);
 
 void handleConnection(int soc_fd, int epoll_fd, int pip_fd);
 

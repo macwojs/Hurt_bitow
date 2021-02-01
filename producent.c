@@ -60,21 +60,21 @@ void produce( int pipe, float rate ) {
 
         int write_data = write( pipe, data, 640 );
         if ( write_data == -1 ) {
-            if(errno == EPIPE){
+            if ( errno == EPIPE ) {
                 return;
             }
             perror( "Can't write data to pipe" );
             exit( EXIT_FAILURE );
         }
 
-        if(current_char == 'z')
+        if ( current_char == 'z' )
             current_char = 'A';
-        else if(current_char == 'Z')
+        else if ( current_char == 'Z' )
             current_char = 'a';
         else
             ++current_char;
 
-        nanosleep(&ts, NULL);
+        nanosleep( &ts, NULL);
     }
 }
 
@@ -102,6 +102,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 ev.events = EPOLLIN;
                 ev.data.ptr = &client_address;
                 ev.data.fd = client_fd;
+                ev.data.u64 = 0;
                 if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, client_fd, &ev ) == -1 ) {
                     perror( "Can't add new descriptor to epoll" );
                     exit( EXIT_FAILURE );
@@ -134,13 +135,16 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
 
                 int write_sock = write( evlist[ i ].data.fd, read_buffer, sizeof( read_buffer ));
                 if ( write_sock == -1 ) {
-                    //TODO: Handle disconected client
+                    evlist[ i ].data.u64 = 13312;
                 } else if ( write_sock < 13312 ) {
-                    //TODO: Handle disconected client
+                    evlist[ i ].data.u64 = 13312 - write_sock;
                 }
-
             } else if ( evlist[ i ].events & EPOLLHUP ) {
-                //TODO: connection droped
+                if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, evlist[ i ].data.fd, NULL) == -1 ) {
+                    perror( "Can't remove fd from epoll" );
+                    exit( EXIT_FAILURE );
+                }
+                close( evlist[ i ].data.fd );
             }
         }
     }

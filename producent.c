@@ -38,7 +38,7 @@ int forkProduce() {
     return pipe_fd[ 0 ];
 }
 
-void handleConnection( int soc_fd, int epoll_fd, int pip_fd ) {
+void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
     int ready;
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
     struct epoll_event ev = {};
@@ -58,7 +58,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pip_fd ) {
             if ( evlist[ i ].data.u32 == 15 ) {
                 struct sockaddr_in client_address;
                 uint32_t client_size = sizeof( client_address );
-                int client_fd = accept4( soc_fd, ( struct sockaddr * ) &client_address, &client_size, SOCK_NONBLOCK );
+                int client_fd = accept( soc_fd, ( struct sockaddr * ) &client_address, &client_size );
                 ev.events = EPOLLIN;
                 ev.data.ptr = &client_address;
                 ev.data.fd = client_fd;
@@ -67,7 +67,38 @@ void handleConnection( int soc_fd, int epoll_fd, int pip_fd ) {
                     exit( EXIT_FAILURE );
                 }
             } else if ( evlist[ i ].events & EPOLLIN ) {
-                //TODO: send new data
+                char trashBuf[64] = {};
+                int recvRes;
+                do { //clear buffer
+                    recvRes = recv( evlist[ i ].data.fd, trashBuf, sizeof( trashBuf ), MSG_DONTWAIT );
+                } while ( recvRes > 0 );
+                if ( recvRes == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
+                    errno = 0;
+                } else {
+                    perror( "Cant read data from client" );
+                    exit( EXIT_FAILURE );
+                }
+
+                //Wait for full storage
+                int nbytes = 0;
+                do {
+                    ioctl( pipe_fd, FIONREAD, &nbytes );
+                } while ( nbytes < 13312 );
+
+                char read_buffer[13312] = {};
+                int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
+                if ( read_pipe == -1 ) {
+                    perror( "Can't read data from pipe" );
+                    exit( EXIT_FAILURE );
+                }
+
+                int write_sock = write( evlist[ i ].data.fd, read_buffer, sizeof( read_buffer ));
+                if ( write_sock == -1 ) {
+                    //TODO: Handle disconected client
+                } else if ( write_sock < 13312 ){
+                    //TODO: Handle disconected client
+                }
+
             } else if ( evlist[ i ].events & EPOLLHUP ) {
                 //TODO: connection droped
             }

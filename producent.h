@@ -17,9 +17,9 @@
 #include <time.h>
 #include <signal.h>
 #include <sys/timerfd.h>
+#include <sys/ioctl.h>
 
 #define BLOCK 640
-#define DELIVERY 13312
 #define CLIENT_LIMIT 1024
 #define EPOLL_WAIT_LIMIT (CLIENT_LIMIT + 1)
 

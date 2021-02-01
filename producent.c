@@ -13,58 +13,68 @@ int main( int argc, char *argv[] ) {
 
     int pipe_fd = forkProduce();
 
-    handleConnection(soc_fd, epoll_fd, pipe_fd);
+    handleConnection( soc_fd, epoll_fd, pipe_fd );
 
-    close(soc_fd);
-    close(epoll_fd);
-    close(pipe_fd);
+    close( soc_fd );
+    close( epoll_fd );
+    close( pipe_fd );
 
     return 0;
 }
 
 int forkProduce() {
     int pipe_fd[2];
-    if(pipe(pipe_fd)==-1){
+    if ( pipe( pipe_fd ) == -1 ) {
         perror( "Can't create pipe" );
         exit( EXIT_FAILURE );
     }
 
     int child = fork();
-    if(child == 0){
+    if ( child == 0 ) {
         //TODO: obsluga magazynu
     }
 
-    close(pipe_fd[1]);
-    return pipe_fd[0];
+    close( pipe_fd[ 1 ] );
+    return pipe_fd[ 0 ];
 }
 
-void handleConnection(int soc_fd, int epoll_fd, int pip_fd){
+void handleConnection( int soc_fd, int epoll_fd, int pip_fd ) {
     int ready;
-    struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof(struct epoll_event));
+    struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
+    struct epoll_event ev = {};
 
-    while(1){
-        ready = epoll_wait(epoll_fd, evlist, EPOLL_WAIT_LIMIT, -1);
-        if (ready == -1) {
-            if (errno == EINTR)
+    while ( 1 ) {
+        ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, -1 );
+        if ( ready == -1 ) {
+            if ( errno == EINTR )
                 continue;
-            else{
+            else {
                 perror( "Error during epoll wait" );
                 exit( EXIT_FAILURE );
             }
         }
 
-        for (int i = 0; i < ready; ++i){
-            if(evlist[i].data.u32 == 15){
-                //TODO: handle new connection
-            }else if(evlist[i].events & EPOLLIN){
+        for ( int i = 0; i < ready; ++i ) {
+            if ( evlist[ i ].data.u32 == 15 ) {
+                struct sockaddr_in client_address;
+                uint32_t client_size = sizeof( client_address );
+                int client_fd = accept4( soc_fd, ( struct sockaddr * ) &client_address, &client_size, SOCK_NONBLOCK );
+                ev.events = EPOLLIN;
+                ev.data.ptr = &client_address;
+                ev.data.fd = client_fd;
+                if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, client_fd, &ev ) == -1 ) {
+                    perror( "Can't add new descriptor to epoll" );
+                    exit( EXIT_FAILURE );
+                }
+            } else if ( evlist[ i ].events & EPOLLIN ) {
                 //TODO: send new data
-            }else if(evlist[i].events & EPOLLHUP){
+            } else if ( evlist[ i ].events & EPOLLHUP ) {
                 //TODO: connection droped
             }
         }
     }
 
-    free(evlist);
+    free( evlist );
 }
 
 int createEpoll( int soc_fd ) {
@@ -110,9 +120,9 @@ int createServer( char *address, uint16_t port ) {
         exit( EXIT_FAILURE );
     }
 
-    if (listen(serverSocket, 20) == -1) {
-        perror("Error in listen\n");
-        exit(EXIT_FAILURE);
+    if ( listen( serverSocket, 20 ) == -1 ) {
+        perror( "Error in listen\n" );
+        exit( EXIT_FAILURE );
     }
 
     return serverSocket;

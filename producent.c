@@ -100,7 +100,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 uint32_t client_size = sizeof( client_address );
                 int client_fd = accept( soc_fd, ( struct sockaddr * ) &client_address, &client_size );
                 struct epoll_event ev = {};
-                ev.events = EPOLLIN;
+                ev.events = EPOLLIN | EPOLLRDHUP;
                 //ev.data.ptr = &client_address;
                 ev.data.fd = client_fd;
                 //ev.data.u64 = 0;
@@ -110,7 +110,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 }
                 printf( "New client properly connected\n" );
 
-            } else if ( evlist[ i ].events & EPOLLHUP) {
+            } else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 printf( "Client disconnecting\n" );
                 if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, evlist[ i ].data.fd, NULL) == -1 ) {
                     perror( "Can't remove fd from epoll" );
@@ -128,7 +128,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 } while ( recv_result > 0 );
                 if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
                     errno = 0;
-                } else if( recv_result == -1) {
+                } else if ( recv_result == -1 ) {
                     perror( "Cant read data from client" );
                     exit( EXIT_FAILURE );
                 }
@@ -224,10 +224,10 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, float *spe
                     break;
             }
         } else {
-            if (strlen(argv[ optind ])<=5){
+            if ( strlen( argv[ optind ] ) <= 5 ) {
                 *port = parseUInt16( argv[ optind ] );
                 optind++;
-            }else{
+            } else {
                 *port = parsePort( argv[ optind ] );
                 memcpy( address, parseAddress( argv[ optind ] ), strlen( parseAddress( argv[ optind ] )) + 1 );
                 optind++;

@@ -81,7 +81,6 @@ void produce( int pipe, float rate ) {
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
     int ready;
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
-    struct epoll_event ev = {};
 
     while ( 1 ) {
         ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, -1 );
@@ -96,26 +95,40 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
 
         for ( int i = 0; i < ready; ++i ) {
             if ( evlist[ i ].data.u32 == 15 ) {
+                printf( "New client connected\n" );
                 struct sockaddr_in client_address;
                 uint32_t client_size = sizeof( client_address );
                 int client_fd = accept( soc_fd, ( struct sockaddr * ) &client_address, &client_size );
+                struct epoll_event ev = {};
                 ev.events = EPOLLIN;
-                ev.data.ptr = &client_address;
+                //ev.data.ptr = &client_address;
                 ev.data.fd = client_fd;
-                ev.data.u64 = 0;
+                //ev.data.u64 = 0;
                 if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, client_fd, &ev ) == -1 ) {
                     perror( "Can't add new descriptor to epoll" );
                     exit( EXIT_FAILURE );
                 }
+                printf( "New client properly connected\n" );
+
+            } else if ( evlist[ i ].events & EPOLLHUP) {
+                printf( "Client disconnecting\n" );
+                if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, evlist[ i ].data.fd, NULL) == -1 ) {
+                    perror( "Can't remove fd from epoll" );
+                    exit( EXIT_FAILURE );
+                }
+                close( evlist[ i ].data.fd );
+                printf( "Client disconnected\n" );
+
             } else if ( evlist[ i ].events & EPOLLIN ) {
-                char trashBuf[64] = {};
-                int recvRes;
+                printf( "New data request\n" );
+                char trashBuf[128] = {};
+                int recv_result = 0;
                 do { //clear buffer
-                    recvRes = recv( evlist[ i ].data.fd, trashBuf, sizeof( trashBuf ), MSG_DONTWAIT );
-                } while ( recvRes > 0 );
-                if ( recvRes == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
+                    recv_result = recv( evlist[ i ].data.fd, trashBuf, sizeof( trashBuf ), MSG_DONTWAIT );
+                } while ( recv_result > 0 );
+                if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
                     errno = 0;
-                } else {
+                } else if( recv_result == -1) {
                     perror( "Cant read data from client" );
                     exit( EXIT_FAILURE );
                 }
@@ -136,15 +149,13 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 int write_sock = write( evlist[ i ].data.fd, read_buffer, sizeof( read_buffer ));
                 if ( write_sock == -1 ) {
                     evlist[ i ].data.u64 = 13312;
+                    continue;
                 } else if ( write_sock < 13312 ) {
                     evlist[ i ].data.u64 = 13312 - write_sock;
+                    continue;
                 }
-            } else if ( evlist[ i ].events & EPOLLHUP ) {
-                if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, evlist[ i ].data.fd, NULL) == -1 ) {
-                    perror( "Can't remove fd from epoll" );
-                    exit( EXIT_FAILURE );
-                }
-                close( evlist[ i ].data.fd );
+
+                printf( "New data sent\n" );
             }
         }
     }

@@ -2,7 +2,7 @@
 
 int main( int argc, char *argv[] ) {
     char address[16] = "localhost";
-    uint16_t port = 5566;
+    uint16_t port;
     float speed;
 
     readInput( argc, argv, address, &port, &speed );
@@ -224,9 +224,14 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, float *spe
                     break;
             }
         } else {
-            *port = parsePort( argv[ optind ] );
-            memcpy( address, parseAddress( argv[ optind ] ), strlen( parseAddress( argv[ optind ] )) + 1 );
-            optind++;
+            if (strlen(argv[ optind ])<=5){
+                *port = parseUInt16( argv[ optind ] );
+                optind++;
+            }else{
+                *port = parsePort( argv[ optind ] );
+                memcpy( address, parseAddress( argv[ optind ] ), strlen( parseAddress( argv[ optind ] )) + 1 );
+                optind++;
+            }
         }
     }
 

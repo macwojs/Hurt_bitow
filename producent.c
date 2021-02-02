@@ -1,5 +1,8 @@
 #include "producent.h"
 
+typedef struct sockaddr_in sockaddr_in;
+long long reserved_data = 0;
+
 int main( int argc, char *argv[] ) {
     char address[16] = "localhost";
     uint16_t port;
@@ -82,6 +85,34 @@ void produce( int pipe, float rate ) {
     }
 }
 
+void addToEpoll(int epoll_fd, int cl_fd){
+    struct epoll_event ev = {};
+
+    ev.events = EPOLLOUT | EPOLLRDHUP;
+
+    struct socket_data *data = ( socket_data * ) calloc( 1, sizeof( socket_data ));
+    data->addr = ( sockaddr_in* ) calloc( 1, sizeof( sockaddr_in ));
+    data->fd = cl_fd;
+    data->data_to_send = FULL_PACKAGE;
+    //TODO: add addr to structure
+
+    ev.data.ptr = data;
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, cl_fd, &ev ) == -1 ) {
+        perror( "Can't add new descriptor to epoll" );
+        exit( EXIT_FAILURE );
+    }
+}
+
+void connectNewClient(int cl_fd, int epoll_fd, int pipe_fd){
+    int nbytes = 0;
+    ioctl( pipe_fd, FIONREAD, &nbytes );
+    if ( nbytes-reserved_data > 13312){
+        addToEpoll(epoll_fd, cl_fd);
+    }else{
+        //TODO: wrzucamy do ringa
+    }
+}
+
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
     int ready;
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
@@ -101,22 +132,10 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
         for ( int i = 0; i < ready; ++i ) {
             if ( evlist[ i ].data.fd == soc_fd ) {
                 printf( "New client connected\n" );
-                struct sockaddr_in client_address;
-                uint32_t client_size = sizeof( client_address );
-                int client_fd = accept( soc_fd, ( struct sockaddr * ) &client_address, &client_size );
-                struct epoll_event ev = {};
 
-                ev.events = EPOLLIN | EPOLLRDHUP;
+                int client_fd = accept( soc_fd, NULL, NULL );
+                connectNewClient(client_fd, epoll_fd, pipe_fd);
 
-                struct socket_data data = {};
-                data.addr = client_address.sin_addr;
-                data.fd = client_fd;
-                ev.data.ptr = &data;
-
-                if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, client_fd, &ev ) == -1 ) {
-                    perror( "Can't add new descriptor to epoll" );
-                    exit( EXIT_FAILURE );
-                }
                 printf( "New client properly connected\n" );
 
             } else if ( evlist[ i ].events & EPOLLRDHUP ) {
@@ -134,47 +153,40 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
 
                 //report
                 fprintf( stderr, "Client disconnected\ttime: %li sec, %li nsec\n", time_stamp.tv_sec, time_stamp.tv_nsec);
-                fprintf( stderr, "\t\t\t\t\t ip: %s\n", inet_ntoa( data->addr ));
+                //fprintf( stderr, "\t\t\t\t\t ip: %s\n", inet_ntoa( data->addr ));
                 //fprintf( stderr, "\t\t\t\t lost data: %s\n", inet_ntoa( data->addr ));
 
 
-                close( evlist[ i ].data.fd );
+                close( data->fd );
                 printf( "Client disconnected\n" );
 
-            } else if ( evlist[ i ].events & EPOLLIN ) {
+            } else if ( evlist[ i ].events & EPOLLOUT ) {
                 printf( "New data request\n" );
-                char trashBuf[128] = {};
-                int recv_result = 0;
-                do { //clear buffer
-                    recv_result = recv( evlist[ i ].data.fd, trashBuf, sizeof( trashBuf ), MSG_DONTWAIT );
-                } while ( recv_result > 0 );
-                if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
-                    errno = 0;
-                } else if ( recv_result == -1 ) {
-                    perror( "Cant read data from client" );
-                    exit( EXIT_FAILURE );
-                }
+                struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
 
-                //Wait for full storage
-                int nbytes = 0;
-                do {
-                    ioctl( pipe_fd, FIONREAD, &nbytes );
-                } while ( nbytes < 13312 );
+//                char trashBuf[128] = {};
+//                int recv_result = 0;
+//                do { //clear buffer
+//                    recv_result = recv( evlist[ i ].data.fd, trashBuf, sizeof( trashBuf ), MSG_DONTWAIT );
+//                } while ( recv_result > 0 );
+//                if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
+//                    errno = 0;
+//                } else if ( recv_result == -1 ) {
+//                    perror( "Cant read data from client" );
+//                    exit( EXIT_FAILURE );
+//                }
 
-                char read_buffer[13312] = {};
+                char read_buffer[SMALL_PACKAGE] = {};
                 int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
                 if ( read_pipe == -1 ) {
                     perror( "Can't read data from pipe" );
                     exit( EXIT_FAILURE );
                 }
 
-                int write_sock = write( evlist[ i ].data.fd, read_buffer, sizeof( read_buffer ));
+                int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
                 if ( write_sock == -1 ) {
-                    evlist[ i ].data.u64 = 13312;
-                    continue;
-                } else if ( write_sock < 13312 ) {
-                    evlist[ i ].data.u64 = 13312 - write_sock;
-                    continue;
+                    perror( "Can't send data to client pipe" );
+                    exit( EXIT_FAILURE );
                 }
 
                 printf( "New data sent\n" );

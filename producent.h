@@ -20,6 +20,8 @@
 #include <sys/ioctl.h>
 
 #define BLOCK 640
+#define SMALL_PACKAGE 3328
+#define FULL_PACKAGE 13312
 #define CLIENT_LIMIT 1024
 #define EPOLL_WAIT_LIMIT (CLIENT_LIMIT + 1)
 
@@ -35,9 +37,13 @@ void produce(int pipe, float rate);
 
 void handleConnection(int soc_fd, int epoll_fd, int pip_fd);
 
+void connectNewClient(int cl_fd, int epoll_fd, int pipe_fd);
+void addToEpoll(int epoll_fd, int cl_fd);
+
 typedef struct socket_data {
-    struct in_addr addr;
+    struct sockaddr_in *addr;
     int fd;
+    int data_to_send;
 } socket_data;
 
 #endif //HURT_BITOW_PRODUCENT_H

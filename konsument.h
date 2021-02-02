@@ -23,7 +23,7 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, int *capac
 
 int connectToServer( char *address, uint16_t port );
 
-int getData( int soc_fd, int capacity, float download_speed, float degradation_speed );
+int getData( int capacity, float download_speed, float degradation_speed,  char *address, uint16_t port );
 
 void on_exit_report( int status, void *dn );
 

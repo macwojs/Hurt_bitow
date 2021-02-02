@@ -11,9 +11,7 @@ int main( int argc, char *argv[] ) {
 
     readInput( argc, argv, address, &port, &capacity, &download_speed, &degradation_speed );
 
-    int soc_fd = connectToServer( address, port );
-
-    getData( soc_fd, capacity, download_speed, degradation_speed );
+    getData( capacity, download_speed, degradation_speed, address, port );
 
     struct timespec finish_time;
     if (clock_gettime(CLOCK_REALTIME, &finish_time) == -1){
@@ -28,7 +26,7 @@ int main( int argc, char *argv[] ) {
 }
 
 
-int getData( int soc_fd, int capacity, float download_speed, float degradation_speed ) {
+int getData( int capacity, float download_speed, float degradation_speed, char *address, uint16_t port ) {
     struct timespec last_check_time;
     struct timespec now_time;
 
@@ -38,16 +36,11 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
 
     struct timespec ts = {};
 
-    char send_buffer = 'r';
     long long storage = capacity * STORAGE;
     long long actual_storage = 0;
-    char buffer[13312] = {};
+    char buffer[SMALL_PACKAGE] = {};
     while ( 1 ) {
-        //Send request for data from server
-        if ( write( soc_fd, &send_buffer, sizeof( send_buffer ) ) == -1 ) {
-            perror( "Cant request for data" );
-            exit( EXIT_FAILURE );
-        }
+        int soc_fd = connectToServer( address, port );
 
         if (clock_gettime(CLOCK_MONOTONIC, &connect_time) == -1){
             perror( "Error during get connect time" );
@@ -56,11 +49,9 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
 
         //Get data from server
         for (int i =0; i<4; i++){
-            //write( soc_fd, &send_buffer, sizeof( send_buffer ) );
+
             int recv_result = read( soc_fd, buffer, sizeof( buffer ) );
-            if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
-                errno = 0;
-            } else if ( recv_result == -1 ) {
+            if ( recv_result == -1 ) {
                 perror( "Cant read data from server" );
                 exit( EXIT_FAILURE );
             }
@@ -122,9 +113,10 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
             }
 
         if(storage - actual_storage < FULL_PACKAGE){
-            close(soc_fd);
             return 0;
         }
+
+        close(soc_fd); //to powinien juz zrobic serwer, ale dla pewnosci
     }
 }
 

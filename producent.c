@@ -94,7 +94,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
         }
 
         for ( int i = 0; i < ready; ++i ) {
-            if ( evlist[ i ].data.u32 == 15 ) {
+            if ( evlist[ i ].data.fd == soc_fd ) {
                 printf( "New client connected\n" );
                 struct sockaddr_in client_address;
                 uint32_t client_size = sizeof( client_address );
@@ -173,7 +173,7 @@ int createEpoll( int soc_fd ) {
     struct epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = soc_fd;
-    ev.data.u32 = 15;
+    //ev.data.u32 = 15;
     if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, soc_fd, &ev ) == -1 ) {
         perror( "Can't add descriptor to epoll" );
         exit( EXIT_FAILURE );

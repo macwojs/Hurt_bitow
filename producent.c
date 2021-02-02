@@ -85,38 +85,63 @@ void produce( int pipe, float rate ) {
     }
 }
 
-void addToEpoll(int epoll_fd, int cl_fd){
+void addToEpoll( int epoll_fd, int cl_fd ) {
     struct epoll_event ev = {};
 
     ev.events = EPOLLOUT | EPOLLRDHUP;
 
     struct socket_data *data = ( socket_data * ) calloc( 1, sizeof( socket_data ));
-    data->addr = ( sockaddr_in* ) calloc( 1, sizeof( sockaddr_in ));
+    data->addr = ( sockaddr_in * ) calloc( 1, sizeof( sockaddr_in ));
     data->fd = cl_fd;
     data->data_to_send = FULL_PACKAGE;
     //TODO: add addr to structure
 
     ev.data.ptr = data;
+
     if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, cl_fd, &ev ) == -1 ) {
         perror( "Can't add new descriptor to epoll" );
         exit( EXIT_FAILURE );
     }
 }
 
-void connectNewClient(int cl_fd, int epoll_fd, int pipe_fd){
+void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd ) {
     int nbytes = 0;
     ioctl( pipe_fd, FIONREAD, &nbytes );
-    if ( nbytes-reserved_data > 13312){
-        addToEpoll(epoll_fd, cl_fd);
-    }else{
+    if ( nbytes - reserved_data > 13312 ) {
+        addToEpoll( epoll_fd, cl_fd );
+    }
+    else {
         //TODO: wrzucamy do ringa
     }
+}
+
+void disconnectClient( socket_data *data, int epoll_fd ) {
+    struct timespec time_stamp;
+    shutdown( data->fd, SHUT_RDWR );
+    close( data->fd );
+
+    if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
+        perror( "Error during get disconnect time" );
+        exit( EXIT_FAILURE );
+    }
+
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
+        perror( "Can't remove descriptor from epoll" );
+        exit( EXIT_FAILURE );
+    }
+
+    fprintf( stderr, "Client disconnected\ttime: %li sec, %li nsec\n", time_stamp.tv_sec,
+             time_stamp.tv_nsec );
+    //fprintf( stderr, "\t\t\t\t\t address: %s:%s\n", inet_ntoa( data->addr ));
+    //fprintf( stderr, "\t\t\t\t lost data: %s\n", inet_ntoa( data->addr ));
+
+    free( data->addr );
+    free( data );
 }
 
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
     int ready;
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
-    struct timespec time_stamp;
 
     while ( 1 ) {
         ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, -1 );
@@ -133,48 +158,25 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
             if ( evlist[ i ].data.fd == soc_fd ) {
                 printf( "New client connected\n" );
 
-                int client_fd = accept( soc_fd, NULL, NULL );
-                connectNewClient(client_fd, epoll_fd, pipe_fd);
+                int client_fd = accept( soc_fd, NULL, NULL);
+                connectNewClient( client_fd, epoll_fd, pipe_fd );
 
                 printf( "New client properly connected\n" );
 
-            } else if ( evlist[ i ].events & EPOLLRDHUP ) {
+            }
+            else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 printf( "Client disconnecting\n" );
-                if ( clock_gettime( CLOCK_MONOTONIC, &time_stamp ) == -1 ) {
-                    perror( "Error during get disconnect time" );
-                    exit( EXIT_FAILURE );
-                }
-
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
-                if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
-                    perror( "Can't remove fd from epoll" );
-                    exit( EXIT_FAILURE );
-                }
-
-                //report
-                fprintf( stderr, "Client disconnected\ttime: %li sec, %li nsec\n", time_stamp.tv_sec, time_stamp.tv_nsec);
-                //fprintf( stderr, "\t\t\t\t\t ip: %s\n", inet_ntoa( data->addr ));
-                //fprintf( stderr, "\t\t\t\t lost data: %s\n", inet_ntoa( data->addr ));
-
-
-                close( data->fd );
+                disconnectClient( data, epoll_fd );
                 printf( "Client disconnected\n" );
-
-            } else if ( evlist[ i ].events & EPOLLOUT ) {
+            }
+            else if ( evlist[ i ].events & EPOLLOUT ) {
                 printf( "New data request\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
 
-//                char trashBuf[128] = {};
-//                int recv_result = 0;
-//                do { //clear buffer
-//                    recv_result = recv( evlist[ i ].data.fd, trashBuf, sizeof( trashBuf ), MSG_DONTWAIT );
-//                } while ( recv_result > 0 );
-//                if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
-//                    errno = 0;
-//                } else if ( recv_result == -1 ) {
-//                    perror( "Cant read data from client" );
-//                    exit( EXIT_FAILURE );
-//                }
+                if ( data->data_to_send == FULL_PACKAGE ) {
+                    reserved_data += FULL_PACKAGE;
+                }
 
                 char read_buffer[SMALL_PACKAGE] = {};
                 int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
@@ -183,6 +185,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                     exit( EXIT_FAILURE );
                 }
 
+                reserved_data -= SMALL_PACKAGE; //Pobralismy dane z pipe, wiec jak znikna to sie zmarnuja
+
                 int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
                 if ( write_sock == -1 ) {
                     perror( "Can't send data to client pipe" );
@@ -190,6 +194,22 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 }
 
                 printf( "New data sent\n" );
+
+                //update events setting
+                data->data_to_send -= SMALL_PACKAGE;
+
+                struct epoll_event ev = {};
+                ev.events = EPOLLOUT | EPOLLRDHUP;
+                ev.data.ptr = data;
+
+                if ( epoll_ctl( epoll_fd, EPOLL_CTL_MOD, data->fd, &ev ) == -1 ) {
+                    perror( "Can't add new descriptor to epoll" );
+                    exit( EXIT_FAILURE );
+                }
+
+                if ( data->data_to_send == 0 ) {
+                    disconnectClient( data, epoll_fd );
+                }
             }
         }
     }
@@ -257,11 +277,13 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, float *spe
                     *speed = parseFloat( optarg );
                     break;
             }
-        } else {
+        }
+        else {
             if ( strlen( argv[ optind ] ) <= 5 ) {
                 *port = parseUInt16( argv[ optind ] );
                 optind++;
-            } else {
+            }
+            else {
                 *port = parsePort( argv[ optind ] );
                 memcpy( address, parseAddress( argv[ optind ] ), strlen( parseAddress( argv[ optind ] )) + 1 );
                 optind++;

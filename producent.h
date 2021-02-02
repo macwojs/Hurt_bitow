@@ -26,7 +26,7 @@
 #define EPOLL_WAIT_LIMIT (CLIENT_LIMIT + 1)
 
 typedef struct socket_data {
-    struct sockaddr_in *addr;
+    struct sockaddr *addr;
     int fd;
     int data_to_send;
 } socket_data;

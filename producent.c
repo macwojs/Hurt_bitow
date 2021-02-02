@@ -1,6 +1,6 @@
 #include "producent.h"
 
-typedef struct sockaddr_in sockaddr_in;
+typedef struct sockaddr sockaddr;
 long long reserved_data = 0;
 
 int main( int argc, char *argv[] ) {
@@ -91,9 +91,17 @@ void addToEpoll( int epoll_fd, int cl_fd ) {
     ev.events = EPOLLOUT | EPOLLRDHUP;
 
     struct socket_data *data = ( socket_data * ) calloc( 1, sizeof( socket_data ));
-    data->addr = ( sockaddr_in * ) calloc( 1, sizeof( sockaddr_in ));
+    data->addr = ( sockaddr * ) calloc( 1, sizeof( sockaddr ));
     data->fd = cl_fd;
     data->data_to_send = FULL_PACKAGE;
+
+    socklen_t len;
+    sockaddr *addr;
+    if ( getpeername(cl_fd, addr, &len) == -1 ){
+        perror( "Can't get addr from fd" );
+        exit( EXIT_FAILURE );
+    }
+
     //TODO: add addr to structure
 
     ev.data.ptr = data;
@@ -132,6 +140,7 @@ void disconnectClient( socket_data *data, int epoll_fd ) {
 
     fprintf( stderr, "Client disconnected\ttime: %li sec, %li nsec\n", time_stamp.tv_sec,
              time_stamp.tv_nsec );
+    //TODO: report address
     //fprintf( stderr, "\t\t\t\t\t address: %s:%s\n", inet_ntoa( data->addr ));
     //fprintf( stderr, "\t\t\t\t lost data: %s\n", inet_ntoa( data->addr ));
 

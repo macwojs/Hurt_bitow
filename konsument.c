@@ -16,12 +16,12 @@ int main( int argc, char *argv[] ) {
     getData( soc_fd, capacity, download_speed, degradation_speed );
 
     struct timespec finish_time;
-    if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 ) {
+    if (clock_gettime(CLOCK_REALTIME, &finish_time) == -1){
         perror( "Error during get finish time" );
         exit( EXIT_FAILURE );
     }
 
-    fprintf( stderr, "Finish time %li sec, %li nsec", finish_time.tv_sec, finish_time.tv_nsec );
+    fprintf(stderr, "Finish time %li sec, %li nsec", finish_time.tv_sec, finish_time.tv_nsec);
     //TODO: print pid and address
 
     return 0;
@@ -44,20 +44,20 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
     char buffer[13312] = {};
     while ( 1 ) {
         //Send request for data from server
-        if ( write( soc_fd, &send_buffer, sizeof( send_buffer )) == -1 ) {
+        if ( write( soc_fd, &send_buffer, sizeof( send_buffer ) ) == -1 ) {
             perror( "Cant request for data" );
             exit( EXIT_FAILURE );
         }
 
-        if ( clock_gettime( CLOCK_MONOTONIC, &connect_time ) == -1 ) {
+        if (clock_gettime(CLOCK_MONOTONIC, &connect_time) == -1){
             perror( "Error during get connect time" );
             exit( EXIT_FAILURE );
         }
 
         //Get data from server
-        for ( int i = 0; i < 4; i++ ) {
+        for (int i =0; i<4; i++){
             //write( soc_fd, &send_buffer, sizeof( send_buffer ) );
-            int recv_result = read( soc_fd, buffer, sizeof( buffer ));
+            int recv_result = read( soc_fd, buffer, sizeof( buffer ) );
             if ( recv_result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK )) {
                 errno = 0;
             } else if ( recv_result == -1 ) {
@@ -65,28 +65,28 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
                 exit( EXIT_FAILURE );
             }
 
-            if ( i == 0 ) {
-                if ( clock_gettime( CLOCK_MONOTONIC, &first_package_time ) == -1 ) {
+            if(i==0){
+                if (clock_gettime(CLOCK_MONOTONIC, &first_package_time) == -1){
                     perror( "Error during get connect time" );
                     exit( EXIT_FAILURE );
                 }
             }
 
-            if ( i == 3 ) {
-                if ( clock_gettime( CLOCK_MONOTONIC, &last_package_time ) == -1 ) {
+            if(i==3){
+                if (clock_gettime(CLOCK_MONOTONIC, &last_package_time) == -1){
                     perror( "Error during get connect time" );
                     exit( EXIT_FAILURE );
                 }
 
                 report *report_data = ( report * ) calloc( 1, sizeof( report ));
-                report_data->a = ( timespec * ) calloc( 1, sizeof( timespec ));
-                report_data->b = ( timespec * ) calloc( 1, sizeof( timespec ));
+                report_data->a = ( timespec* ) calloc( 1, sizeof( timespec ));
+                report_data->b = ( timespec* ) calloc( 1, sizeof( timespec ));
 
                 report_data->a->tv_sec = first_package_time.tv_sec - connect_time.tv_sec;
                 report_data->a->tv_nsec = first_package_time.tv_nsec - connect_time.tv_nsec;
 
-                report_data->b->tv_sec = connect_time.tv_sec - last_package_time.tv_sec;
-                report_data->b->tv_nsec = connect_time.tv_nsec - last_package_time.tv_nsec;
+                report_data->b->tv_sec = last_package_time.tv_sec - first_package_time.tv_sec;
+                report_data->b->tv_nsec = last_package_time.tv_nsec - first_package_time.tv_nsec;
 
                 on_exit( on_exit_report, ( void * ) report_data );
             }
@@ -98,21 +98,20 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
             nanosleep( &ts, NULL);
 
             //tutaj biodegraduje material
-            if ( i == 0 ) {
-                if ( clock_gettime( CLOCK_MONOTONIC, &last_check_time ) == -1 ) {
+            if(i==0){
+                if (clock_gettime(CLOCK_MONOTONIC, &last_check_time) == -1){
                     perror( "Error during get connect time" );
                     exit( EXIT_FAILURE );
                 }
-            } else {
-                if ( clock_gettime( CLOCK_MONOTONIC, &now_time ) == -1 ) {
+            }else{
+                if (clock_gettime(CLOCK_MONOTONIC, &now_time) == -1){
                     perror( "Error during get connect time" );
                     exit( EXIT_FAILURE );
                 }
 
-                double deg = ( double ) now_time.tv_sec - ( double ) last_check_time.tv_sec +
-                             ( double ) ( now_time.tv_nsec - last_check_time.tv_nsec ) * 1e-9;
-                int degraded_data = ( int ) ( deg * degradation_speed );
-                actual_storage -= degraded_data;
+                double deg = (double)now_time.tv_sec - (double)last_check_time.tv_sec + (double)(now_time.tv_nsec - last_check_time.tv_nsec) * 1e-9;
+                int degraded_data= (int)(deg * degradation_speed);
+                actual_storage -=degraded_data;
 
                 last_check_time.tv_sec = now_time.tv_sec;
                 last_check_time.tv_nsec = now_time.tv_sec;
@@ -120,21 +119,29 @@ int getData( int soc_fd, int capacity, float download_speed, float degradation_s
 
             //Processing and degradation
             actual_storage += recv_result;
-        }
+            }
 
-        if ( storage - actual_storage < FULL_PACKAGE ) {
-            close( soc_fd );
+        if(storage - actual_storage < FULL_PACKAGE){
+            close(soc_fd);
             return 0;
         }
     }
 }
 
-void on_exit_report( int status, void *dn ) {
+void on_exit_report( int status, void *dn ){
     report *data = ( report * ) dn;
-    fprintf( stderr, "\n\nDelay between connect and first package: %li sec and %li nsec\n", data->a->tv_sec,
-             data->a->tv_nsec );
-    fprintf( stderr, "Delay between first package and last package: %li sec and %li nsec", data->a->tv_sec,
-             data->a->tv_nsec );
+    if( data->a->tv_nsec < 0){
+        data->a->tv_sec -= 1;
+        data->a->tv_nsec = 1e9 - data->a->tv_nsec;
+    }
+
+    if( data->b->tv_nsec < 0){
+        data->b->tv_sec -= 1;
+        data->b->tv_nsec = 1e9 - data->a->tv_nsec;
+    }
+
+    fprintf(stderr, "\n\nDelay between connect and first package: %li sec and %li nsec\n", data->a->tv_sec, data->a->tv_nsec);
+    fprintf(stderr, "Delay between first package and last package: %li sec and %li nsec\n", data->b->tv_sec, data->b->tv_nsec);
 }
 
 int connectToServer( char *address, uint16_t port ) {

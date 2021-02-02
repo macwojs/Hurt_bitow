@@ -35,4 +35,9 @@ void produce(int pipe, float rate);
 
 void handleConnection(int soc_fd, int epoll_fd, int pip_fd);
 
+typedef struct socket_data {
+    struct in_addr addr;
+    int fd;
+} socket_data;
+
 #endif //HURT_BITOW_PRODUCENT_H

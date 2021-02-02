@@ -13,6 +13,8 @@ int main( int argc, char *argv[] ) {
 
     int pipe_fd = forkProduce( speed );
 
+    //TODO: timer
+
     handleConnection( soc_fd, epoll_fd, pipe_fd );
 
     close( soc_fd );
@@ -58,6 +60,8 @@ void produce( int pipe, float rate ) {
             data[ i ] = current_char;
         }
 
+        //TODO: sprawdz czy pip nie jest pelny
+
         int write_data = write( pipe, data, 640 );
         if ( write_data == -1 ) {
             if ( errno == EPIPE ) {
@@ -81,6 +85,7 @@ void produce( int pipe, float rate ) {
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
     int ready;
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
+    struct timespec time_stamp;
 
     while ( 1 ) {
         ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, -1 );
@@ -100,10 +105,14 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
                 uint32_t client_size = sizeof( client_address );
                 int client_fd = accept( soc_fd, ( struct sockaddr * ) &client_address, &client_size );
                 struct epoll_event ev = {};
+
                 ev.events = EPOLLIN | EPOLLRDHUP;
-                //ev.data.ptr = &client_address;
-                ev.data.fd = client_fd;
-                //ev.data.u64 = 0;
+
+                struct socket_data data = {};
+                data.addr = client_address.sin_addr;
+                data.fd = client_fd;
+                ev.data.ptr = &data;
+
                 if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, client_fd, &ev ) == -1 ) {
                     perror( "Can't add new descriptor to epoll" );
                     exit( EXIT_FAILURE );
@@ -112,10 +121,23 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
 
             } else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 printf( "Client disconnecting\n" );
-                if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, evlist[ i ].data.fd, NULL) == -1 ) {
+                if ( clock_gettime( CLOCK_MONOTONIC, &time_stamp ) == -1 ) {
+                    perror( "Error during get disconnect time" );
+                    exit( EXIT_FAILURE );
+                }
+
+                struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
+                if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
                     perror( "Can't remove fd from epoll" );
                     exit( EXIT_FAILURE );
                 }
+
+                //report
+                fprintf( stderr, "Client disconnected\ttime: %li sec, %li nsec\n", time_stamp.tv_sec, time_stamp.tv_nsec);
+                fprintf( stderr, "\t\t\t\t\t ip: %s\n", inet_ntoa( data->addr ));
+                //fprintf( stderr, "\t\t\t\t lost data: %s\n", inet_ntoa( data->addr ));
+
+
                 close( evlist[ i ].data.fd );
                 printf( "Client disconnected\n" );
 

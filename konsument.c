@@ -20,8 +20,11 @@ int main( int argc, char *argv[] ) {
         exit( EXIT_FAILURE );
     }
 
-    fprintf( stderr, "Finish time %li sec, %li nsec", finish_time.tv_sec, finish_time.tv_nsec );
-    fprintf( stderr, "\t\t\t\t\t address: %s:%d\n", inet_ntoa( local_address.sin_addr ), ntohs( local_address.sin_port ));
+    fprintf( stderr, "Finish time %li sec, %li nsec\n", finish_time.tv_sec, finish_time.tv_nsec );
+    fprintf( stderr, "Address: %s:%d\n", inet_ntoa( local_address.sin_addr ),
+             ntohs( local_address.sin_port ));
+    fprintf( stderr, "Process pid: %d\n", getpid() );
+
 
     return 0;
 }
@@ -116,8 +119,8 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
         }
 
         if ( storage - actual_storage < FULL_PACKAGE ) {
-            int addr_size = sizeof(local_address);
-            getsockname(soc_fd, &local_address, &addr_size);
+            socklen_t addr_size = sizeof( local_address );
+            getsockname( soc_fd, &local_address, &addr_size );
 
             close( soc_fd );
             return 0;

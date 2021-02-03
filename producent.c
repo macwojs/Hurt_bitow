@@ -91,18 +91,8 @@ void addToEpoll( int epoll_fd, int cl_fd ) {
     ev.events = EPOLLOUT | EPOLLRDHUP;
 
     struct socket_data *data = ( socket_data * ) calloc( 1, sizeof( socket_data ));
-    data->addr = ( sockaddr * ) calloc( 1, sizeof( sockaddr ));
     data->fd = cl_fd;
     data->data_to_send = FULL_PACKAGE;
-
-    socklen_t len;
-    sockaddr *addr;
-    if ( getpeername(cl_fd, addr, &len) == -1 ){
-        perror( "Can't get addr from fd" );
-        exit( EXIT_FAILURE );
-    }
-
-    //TODO: add addr to structure
 
     ev.data.ptr = data;
 
@@ -125,7 +115,21 @@ void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd ) {
 
 void disconnectClient( socket_data *data, int epoll_fd ) {
     struct timespec time_stamp;
+
+    struct sockaddr_in address = { 0 };
+    socklen_t addressLength = sizeof( address );
+    if ( getpeername( data->fd, ( struct sockaddr * ) &address, &addressLength ) == -1 ) {
+        perror( "Can't get address from descriptor" );
+        exit( EXIT_FAILURE );
+    }
+
     shutdown( data->fd, SHUT_RDWR );
+
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
+        perror( "Can't remove descriptor from epoll" );
+        exit( EXIT_FAILURE );
+    }
+
     close( data->fd );
 
     if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
@@ -133,19 +137,53 @@ void disconnectClient( socket_data *data, int epoll_fd ) {
         exit( EXIT_FAILURE );
     }
 
-    if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
-        perror( "Can't remove descriptor from epoll" );
+    fprintf( stderr, "Client disconnected  time: %li sec, %li nsec\n", time_stamp.tv_sec,
+             time_stamp.tv_nsec );
+    fprintf( stderr, "\t\t\t\t\t address: %s:%d\n", inet_ntoa( address.sin_addr ), ntohs( address.sin_port ));
+    fprintf( stderr, "\t\t\t\t\t lost data: %d\n", data->data_to_send);
+
+    free( data );
+}
+
+void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
+    if ( data->data_to_send == FULL_PACKAGE ) {
+        reserved_data += FULL_PACKAGE;
+    }
+
+    char read_buffer[SMALL_PACKAGE] = {};
+    int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
+    if ( read_pipe == -1 ) {
+        perror( "Can't read data from pipe" );
         exit( EXIT_FAILURE );
     }
 
-    fprintf( stderr, "Client disconnected\ttime: %li sec, %li nsec\n", time_stamp.tv_sec,
-             time_stamp.tv_nsec );
-    //TODO: report address
-    //fprintf( stderr, "\t\t\t\t\t address: %s:%s\n", inet_ntoa( data->addr ));
-    //fprintf( stderr, "\t\t\t\t lost data: %s\n", inet_ntoa( data->addr ));
+    reserved_data -= SMALL_PACKAGE; //Pobralismy dane z pipe, wiec jak znikna to sie zmarnuja
 
-    free( data->addr );
-    free( data );
+    int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
+    if ( write_sock == -1 ) {
+        perror( "Can't send data to client pipe" );
+        exit( EXIT_FAILURE );
+    }
+
+    printf( "New data sent\n" );
+
+    //TODO: sprawdz, czy wszystko sie wyslalo, a jak nie to czy klient nie umarla, a jak umarl to go usun i zrob raport
+
+    //update events setting
+    data->data_to_send -= SMALL_PACKAGE;
+
+    struct epoll_event ev = {};
+    ev.events = EPOLLOUT | EPOLLRDHUP;
+    ev.data.ptr = data;
+
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_MOD, data->fd, &ev ) == -1 ) {
+        perror( "Can't add new descriptor to epoll" );
+        exit( EXIT_FAILURE );
+    }
+
+    if ( data->data_to_send == 0 ) {
+        disconnectClient( data, epoll_fd );
+    }
 }
 
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
@@ -166,10 +204,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
         for ( int i = 0; i < ready; ++i ) {
             if ( evlist[ i ].data.fd == soc_fd ) {
                 printf( "New client connected\n" );
-
                 int client_fd = accept( soc_fd, NULL, NULL);
                 connectNewClient( client_fd, epoll_fd, pipe_fd );
-
                 printf( "New client properly connected\n" );
 
             }
@@ -182,43 +218,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
             else if ( evlist[ i ].events & EPOLLOUT ) {
                 printf( "New data request\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
-
-                if ( data->data_to_send == FULL_PACKAGE ) {
-                    reserved_data += FULL_PACKAGE;
-                }
-
-                char read_buffer[SMALL_PACKAGE] = {};
-                int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
-                if ( read_pipe == -1 ) {
-                    perror( "Can't read data from pipe" );
-                    exit( EXIT_FAILURE );
-                }
-
-                reserved_data -= SMALL_PACKAGE; //Pobralismy dane z pipe, wiec jak znikna to sie zmarnuja
-
-                int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
-                if ( write_sock == -1 ) {
-                    perror( "Can't send data to client pipe" );
-                    exit( EXIT_FAILURE );
-                }
-
-                printf( "New data sent\n" );
-
-                //update events setting
-                data->data_to_send -= SMALL_PACKAGE;
-
-                struct epoll_event ev = {};
-                ev.events = EPOLLOUT | EPOLLRDHUP;
-                ev.data.ptr = data;
-
-                if ( epoll_ctl( epoll_fd, EPOLL_CTL_MOD, data->fd, &ev ) == -1 ) {
-                    perror( "Can't add new descriptor to epoll" );
-                    exit( EXIT_FAILURE );
-                }
-
-                if ( data->data_to_send == 0 ) {
-                    disconnectClient( data, epoll_fd );
-                }
+                sendData( data, epoll_fd, pipe_fd );
             }
         }
     }

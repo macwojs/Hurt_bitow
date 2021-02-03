@@ -26,7 +26,6 @@
 #define EPOLL_WAIT_LIMIT (CLIENT_LIMIT + 1)
 
 typedef struct socket_data {
-    struct sockaddr *addr;
     int fd;
     int data_to_send;
 } socket_data;
@@ -37,16 +36,19 @@ int createServer( char *address, uint16_t port );
 
 int createEpoll( int soc_fd );
 
-int forkProduce(float rate);
+int forkProduce( float rate );
 
-void produce(int pipe, float rate);
+void produce( int pipe, float rate );
 
-void handleConnection(int soc_fd, int epoll_fd, int pip_fd);
+void handleConnection( int soc_fd, int epoll_fd, int pip_fd );
 
-void connectNewClient(int cl_fd, int epoll_fd, int pipe_fd);
-void addToEpoll(int epoll_fd, int cl_fd);
+void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd );
 
-void disconnectClient( socket_data *data, int epoll_fd);
+void addToEpoll( int epoll_fd, int cl_fd );
+
+void disconnectClient( socket_data *data, int epoll_fd );
+
+void sendData( socket_data *data, int epoll_fd, int pipe_fd );
 
 
 #endif //HURT_BITOW_PRODUCENT_H

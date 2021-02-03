@@ -161,6 +161,9 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
     if ( data->data_to_send == SMALL_PACKAGE )
         data->data_to_send = 0;
 
+    //znaczy, ze transmisja ruszyla, ale nic nie wyslala
+    if ( data->data_to_send == -1 )
+        data->data_to_send = SMALL_PACKAGE;
 
     if ( data->data_to_send > 0 ) {
         char read_buffer[data->data_to_send];
@@ -186,8 +189,11 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     reserved_data -= SMALL_PACKAGE; //Pobralismy dane z pipe, wiec jak znikna to sie zmarnuja
 
     int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
-    if ( write_sock == -1 )
-        errorSend( "Can't send data to client pipe" );
+    if ( write_sock == -1 ) {
+        data->data_to_send = -1; //failed without send any data but after sending start
+        disconnectClient( data, epoll_fd, pipe_fd );
+    }
+    errorSend( "Can't send data to client pipe" );
 
     //printf( "New data sent\n" );
 
@@ -259,9 +265,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
         if ( ready == -1 ) {
             if ( errno == EINTR )
                 continue;
-            else {
+            else
                 errorSend( "Error during epoll wait" );
-            }
         }
 
         for ( int i = 0; i < ready; ++i ) {

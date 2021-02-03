@@ -58,5 +58,7 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd );
 
 void sendData( socket_data *data, int epoll_fd, int pipe_fd );
 
+void errorSend( char *msg );
+
 
 #endif //HURT_BITOW_PRODUCENT_H

@@ -29,6 +29,8 @@ int getData( int capacity, float download_speed, float degradation_speed,  char 
 
 void on_exit_report( int status, void *dn );
 
+void errorSend( char *msg );
+
 typedef struct report {
     struct timespec *a;
     struct timespec *b;

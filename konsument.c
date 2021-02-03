@@ -15,10 +15,8 @@ int main( int argc, char *argv[] ) {
     getData( capacity, download_speed, degradation_speed, address, port );
 
     struct timespec finish_time;
-    if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 ) {
-        perror( "Error during get finish time" );
-        exit( EXIT_FAILURE );
-    }
+    if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 )
+        errorSend( "Error during get finish time" );
 
     fprintf( stderr, "Finish time %li sec, %li nsec\n", finish_time.tv_sec, finish_time.tv_nsec );
     fprintf( stderr, "Address: %s:%d\n", inet_ntoa( local_address.sin_addr ),
@@ -47,32 +45,24 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
         int soc_fd = connectToServer( address, port );
         //printf("Connected\n");
 
-        if ( clock_gettime( CLOCK_MONOTONIC, &connect_time ) == -1 ) {
-            perror( "Error during get connect time" );
-            exit( EXIT_FAILURE );
-        }
+        if ( clock_gettime( CLOCK_MONOTONIC, &connect_time ) == -1 )
+            errorSend( "Error during get connect time" );
 
         //Get data from server
         for ( int i = 0; i < 4; i++ ) {
 
             int recv_result = read( soc_fd, buffer, sizeof( buffer ));
-            if ( recv_result == -1 ) {
-                perror( "Cant read data from server" );
-                exit( EXIT_FAILURE );
-            }
+            if ( recv_result == -1 )
+                errorSend( "Cant read data from server" );
 
             if ( i == 0 ) {
-                if ( clock_gettime( CLOCK_MONOTONIC, &first_package_time ) == -1 ) {
-                    perror( "Error during get connect time" );
-                    exit( EXIT_FAILURE );
-                }
+                if ( clock_gettime( CLOCK_MONOTONIC, &first_package_time ) == -1 )
+                    errorSend( "Error during get connect time" );
             }
 
             if ( i == 3 ) {
-                if ( clock_gettime( CLOCK_MONOTONIC, &last_package_time ) == -1 ) {
-                    perror( "Error during get connect time" );
-                    exit( EXIT_FAILURE );
-                }
+                if ( clock_gettime( CLOCK_MONOTONIC, &last_package_time ) == -1 )
+                    errorSend( "Error during get connect time" );
 
                 report *report_data = ( report * ) calloc( 1, sizeof( report ));
                 report_data->a = ( timespec * ) calloc( 1, sizeof( timespec ));
@@ -95,16 +85,12 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
 
             //tutaj biodegraduje material
             if ( i == 0 ) {
-                if ( clock_gettime( CLOCK_MONOTONIC, &last_check_time ) == -1 ) {
-                    perror( "Error during get connect time" );
-                    exit( EXIT_FAILURE );
-                }
+                if ( clock_gettime( CLOCK_MONOTONIC, &last_check_time ) == -1 )
+                    errorSend( "Error during get connect time" );
             }
             else {
-                if ( clock_gettime( CLOCK_MONOTONIC, &now_time ) == -1 ) {
-                    perror( "Error during get connect time" );
-                    exit( EXIT_FAILURE );
-                }
+                if ( clock_gettime( CLOCK_MONOTONIC, &now_time ) == -1 )
+                    errorSend( "Error during get connect time" );
 
                 double deg = ( double ) now_time.tv_sec - ( double ) last_check_time.tv_sec +
                              ( double ) ( now_time.tv_nsec - last_check_time.tv_nsec ) * 1e-9;
@@ -118,7 +104,6 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
             //Processing and degradation
             actual_storage += recv_result;
         }
-        //printf("Package of data downloaded\n");
 
         if ( storage - actual_storage < FULL_PACKAGE ) {
             socklen_t addr_size = sizeof( local_address );
@@ -133,7 +118,7 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
 }
 
 void on_exit_report( int status, void *dn ) {
-    UNUSED(status);
+    UNUSED( status );
     report *data = ( report * ) dn;
     if ( data->a->tv_nsec < 0 ) {
         data->a->tv_sec -= 1;
@@ -153,24 +138,18 @@ void on_exit_report( int status, void *dn ) {
 
 int connectToServer( char *address, uint16_t port ) {
     int client_socket = socket( AF_INET, SOCK_STREAM, 0 );
-    if ( client_socket == -1 ) {
-        perror( "Can't create client socket\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( client_socket == -1 )
+        errorSend( "Can't create client socket" );
 
     struct sockaddr_in addr;
     memset( &addr, 0, sizeof( struct sockaddr_in ));
     addr.sin_port = htons( port );
     addr.sin_family = AF_INET;
-    if ( inet_aton( address, &addr.sin_addr ) == -1 ) {
-        perror( "Error during parsing address\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( inet_aton( address, &addr.sin_addr ) == -1 )
+        errorSend( "Error during parsing address" );
 
-    if ( connect( client_socket, &addr, sizeof( addr )) == -1 ) {
-        perror( "Error during connecting to server\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( connect( client_socket, &addr, sizeof( addr )) == -1 )
+        errorSend( "Error during connecting to server" );
 
     return client_socket;
 }
@@ -206,4 +185,9 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, int *capac
     }
 
     return 1;
+}
+
+void errorSend( char *msg ) {
+    perror( msg );
+    exit( EXIT_FAILURE );
 }

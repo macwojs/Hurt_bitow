@@ -1,7 +1,6 @@
 #include "producent.h"
 
-typedef struct sockaddr sockaddr;
-long long reserved_data = 0;
+int reserved_data = 0;
 int client_count = 0;
 int last_data_status = 0;
 
@@ -33,38 +32,31 @@ int main( int argc, char *argv[] ) {
 
 int createTimer( int epoll_fd ) {
     int timer_fd = timerfd_create( CLOCK_MONOTONIC, TFD_NONBLOCK );
-    if ( timer_fd == -1 ) {
-        printf( "Can't create timer\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( timer_fd == -1 )
+        errorSend( "Can't create timer" );
+
     struct itimerspec ts;
     ts.it_value.tv_sec = 5;
     ts.it_value.tv_nsec = 0;
     ts.it_interval.tv_sec = 5;
     ts.it_interval.tv_nsec = 0;
-    if ( timerfd_settime( timer_fd, 0, &ts, NULL) < 0 ) {
-        printf( "Can't set timer\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( timerfd_settime( timer_fd, 0, &ts, NULL) < 0 )
+        errorSend( "Can't set timer" );
 
     struct epoll_event ev = { 0 };
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = timer_fd;
 
-    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev ) == -1 ) {
-        perror( "Can't add timer descriptor to epoll" );
-        exit( EXIT_FAILURE );
-    }
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev ) == -1 )
+        errorSend( "Can't add timer descriptor to epoll" );
 
     return timer_fd;
 }
 
 int forkProduce( float rate ) {
     int pipe_fd[2];
-    if ( pipe( pipe_fd ) == -1 ) {
-        perror( "Can't create pipe" );
-        exit( EXIT_FAILURE );
-    }
+    if ( pipe( pipe_fd ) == -1 )
+        errorSend( "Can't create pipe" );
 
     int child = fork();
     if ( child == 0 ) {
@@ -100,8 +92,7 @@ void produce( int pipe, float rate ) {
             if ( errno == EPIPE ) {
                 return;
             }
-            perror( "Can't write data to pipe" );
-            exit( EXIT_FAILURE );
+            errorSend( "Can't write data to pipe" );
         }
 
         if ( current_char == 'z' )
@@ -126,10 +117,8 @@ void addToEpoll( int epoll_fd, int cl_fd ) {
 
     ev.data.ptr = data;
 
-    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, cl_fd, &ev ) == -1 ) {
-        perror( "Can't add new descriptor to epoll" );
-        exit( EXIT_FAILURE );
-    }
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, cl_fd, &ev ) == -1 )
+        errorSend( "Can't add new descriptor to epoll" );
 }
 
 void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote ) {
@@ -148,25 +137,19 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
 
     struct sockaddr_in address = { 0 };
     socklen_t addressLength = sizeof( address );
-    if ( getpeername( data->fd, ( struct sockaddr * ) &address, &addressLength ) == -1 ) {
-        perror( "Can't get address from descriptor" );
-        exit( EXIT_FAILURE );
-    }
+    if ( getpeername( data->fd, ( struct sockaddr * ) &address, &addressLength ) == -1 )
+        errorSend( "Can't get address from descriptor" );
 
     shutdown( data->fd, SHUT_RDWR );
     client_count--;
 
-    if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
-        perror( "Can't remove descriptor from epoll" );
-        exit( EXIT_FAILURE );
-    }
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 )
+        errorSend( "Can't remove descriptor from epoll" );
 
     close( data->fd );
 
-    if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
-        perror( "Error during get disconnect time" );
-        exit( EXIT_FAILURE );
-    }
+    if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 )
+        errorSend( "Error during get disconnect time" );
 
     fprintf( stderr, "\nClient disconnected  time: %li sec, %li nsec\n", time_stamp.tv_sec,
              time_stamp.tv_nsec );
@@ -181,10 +164,9 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
 
     if ( data->data_to_send > 0 ) {
         char read_buffer[data->data_to_send];
-        if ( read( pipe_fd, read_buffer, sizeof( read_buffer )) == -1 ) {
-            perror( "Can't read data from pipe" );
-            exit( EXIT_FAILURE );
-        }
+        if ( read( pipe_fd, read_buffer, sizeof( read_buffer )) == -1 )
+            errorSend( "Can't read data from pipe" );
+
         reserved_data -= data->data_to_send;
     }
 
@@ -198,18 +180,14 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
 
     char read_buffer[SMALL_PACKAGE] = { 0 };
     int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
-    if ( read_pipe == -1 ) {
-        perror( "Can't read data from pipe" );
-        exit( EXIT_FAILURE );
-    }
+    if ( read_pipe == -1 )
+        errorSend( "Can't read data from pipe" );
 
     reserved_data -= SMALL_PACKAGE; //Pobralismy dane z pipe, wiec jak znikna to sie zmarnuja
 
     int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
-    if ( write_sock == -1 ) {
-        perror( "Can't send data to client pipe" );
-        exit( EXIT_FAILURE );
-    }
+    if ( write_sock == -1 )
+        errorSend( "Can't send data to client pipe" );
 
     //printf( "New data sent\n" );
 
@@ -222,10 +200,8 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     ev.events = EPOLLOUT | EPOLLRDHUP;
     ev.data.ptr = data;
 
-    if ( epoll_ctl( epoll_fd, EPOLL_CTL_MOD, data->fd, &ev ) == -1 ) {
-        perror( "Can't add new descriptor to epoll" );
-        exit( EXIT_FAILURE );
-    }
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_MOD, data->fd, &ev ) == -1 )
+        errorSend( "Can't add new descriptor to epoll" );
 
     if ( data->data_to_send == 0 ) {
         disconnectClient( data, epoll_fd, pipe_fd );
@@ -246,7 +222,7 @@ void addFromQuote( int epoll_fd, list **quote, int pipe_fd ) {
     }
 }
 
-void timerReport( int timer_fd, int pipe_fd ){
+void timerReport( int timer_fd, int pipe_fd ) {
     const size_t pipe_capacity = fcntl( pipe_fd, F_GETPIPE_SZ );
     int pipe_current;
     uint64_t temp_buf;
@@ -254,10 +230,9 @@ void timerReport( int timer_fd, int pipe_fd ){
         printf( "err read\n" );
     }
     struct timespec time_stamp;
-    if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
-        perror( "Error during get disconnect time" );
-        exit( EXIT_FAILURE );
-    }
+    if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 )
+        errorSend( "Error during get disconnect time" );
+
     fprintf( stderr, "\nReport for time: %li sec, %li nsec\n", time_stamp.tv_sec,
              time_stamp.tv_nsec );
     ioctl( pipe_fd, FIONREAD, &pipe_current );
@@ -285,8 +260,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
             if ( errno == EINTR )
                 continue;
             else {
-                perror( "Error during epoll wait" );
-                exit( EXIT_FAILURE );
+                errorSend( "Error during epoll wait" );
             }
         }
 
@@ -297,7 +271,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
                 connectNewClient( client_fd, epoll_fd, pipe_fd, quote );
             }
             else if ( evlist[ i ].data.fd == timer_fd && evlist[ i ].events & EPOLLIN ) {
-                timerReport(timer_fd, pipe_fd);
+                timerReport( timer_fd, pipe_fd );
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
@@ -313,19 +287,15 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
 
 int createEpoll( int soc_fd ) {
     int epoll_fd = epoll_create1( 0 );
-    if ( epoll_fd == -1 ) {
-        perror( "Can't create epoll" );
-        exit( EXIT_FAILURE );
-    }
+    if ( epoll_fd == -1 )
+        errorSend( "Can't create epoll" );
 
     struct epoll_event ev = { 0 };
     ev.events = EPOLLIN;
     ev.data.fd = soc_fd;
 
-    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, soc_fd, &ev ) == -1 ) {
-        perror( "Can't add descriptor to epoll" );
-        exit( EXIT_FAILURE );
-    }
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, soc_fd, &ev ) == -1 )
+        errorSend( "Can't add descriptor to epoll" );
 
     return epoll_fd;
 }
@@ -333,10 +303,8 @@ int createEpoll( int soc_fd ) {
 int createServer( char *address, uint16_t port ) {
     int serverSocket = socket( AF_INET, SOCK_STREAM, 0 );
 
-    if ( serverSocket == -1 ) {
-        perror( "Can't create server socket\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( serverSocket == -1 )
+        errorSend( "Can't create server socket" );
 
     struct sockaddr_in addr;
     memset( &addr, 0, sizeof( struct sockaddr_in ));
@@ -344,20 +312,14 @@ int createServer( char *address, uint16_t port ) {
     addr.sin_family = AF_INET;
     int res = inet_aton( address, &addr.sin_addr );
 
-    if ( res == -1 ) {
-        perror( "Error int inet_aton\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( res == -1 )
+        errorSend( "Error int inet_aton" );
 
-    if ( bind( serverSocket, ( struct sockaddr * ) &addr, sizeof( struct sockaddr_in )) == -1 ) {
-        perror( "Can't bind server socket\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( bind( serverSocket, ( struct sockaddr * ) &addr, sizeof( struct sockaddr_in )) == -1 )
+        errorSend( "Can't bind server socket" );
 
-    if ( listen( serverSocket, 20 ) == -1 ) {
-        perror( "Error in listen\n" );
-        exit( EXIT_FAILURE );
-    }
+    if ( listen( serverSocket, 20 ) == -1 )
+        errorSend( "Error in listen" );
 
     return serverSocket;
 }
@@ -386,4 +348,9 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, float *spe
     }
 
     return 1;
+}
+
+void errorSend( char *msg ) {
+    perror( msg );
+    exit( EXIT_FAILURE );
 }

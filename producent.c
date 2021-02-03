@@ -18,7 +18,7 @@ int main( int argc, char *argv[] ) {
 
     //TODO: timer
 
-    handleConnection( soc_fd, epoll_fd, pipe_fd );
+    handleConnection( soc_fd, epoll_fd, pipe_fd, speed );
 
     close( soc_fd );
     close( epoll_fd );
@@ -102,14 +102,14 @@ void addToEpoll( int epoll_fd, int cl_fd ) {
     }
 }
 
-void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd ) {
+void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote ) {
     int nbytes = 0;
     ioctl( pipe_fd, FIONREAD, &nbytes );
     if ( nbytes - reserved_data > 13312 ) {
         addToEpoll( epoll_fd, cl_fd );
     }
     else {
-        //TODO: wrzucamy do ringa
+        put( quote, cl_fd );
     }
 }
 
@@ -140,7 +140,7 @@ void disconnectClient( socket_data *data, int epoll_fd ) {
     fprintf( stderr, "Client disconnected  time: %li sec, %li nsec\n", time_stamp.tv_sec,
              time_stamp.tv_nsec );
     fprintf( stderr, "\t\t\t\t\t address: %s:%d\n", inet_ntoa( address.sin_addr ), ntohs( address.sin_port ));
-    fprintf( stderr, "\t\t\t\t\t lost data: %d\n", data->data_to_send);
+    fprintf( stderr, "\t\t\t\t\t lost data: %d\n", data->data_to_send );
 
     free( data );
 }
@@ -186,12 +186,28 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     }
 }
 
-void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
-    int ready;
+void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, float rate ) {
+    int timeout = ( int ) (( 640 / ( rate * 2662 )) * 1e3 ); //production rate in ms for epoll timeout
+
+    int ready, nbytes;
+
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
 
+    list *quote = create();
+
     while ( 1 ) {
-        ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, -1 );
+        ioctl( pipe_fd, FIONREAD, &nbytes );
+        if ( nbytes - reserved_data > 13312 ) {
+            for ( int i = 0; i < ( nbytes - reserved_data ) / 13312; i++ ) {
+                int fd = get( quote );
+                if ( fd != -1 ) {
+                    addToEpoll( epoll_fd, fd );
+                    quote = del( quote );
+                }
+            }
+        }
+
+        ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, timeout );
         if ( ready == -1 ) {
             if ( errno == EINTR )
                 continue;
@@ -205,7 +221,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
             if ( evlist[ i ].data.fd == soc_fd ) {
                 printf( "New client connected\n" );
                 int client_fd = accept( soc_fd, NULL, NULL);
-                connectNewClient( client_fd, epoll_fd, pipe_fd );
+                connectNewClient( client_fd, epoll_fd, pipe_fd, quote );
                 printf( "New client properly connected\n" );
 
             }
@@ -223,6 +239,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd ) {
         }
     }
 
+    free( quote );
     free( evlist );
 }
 

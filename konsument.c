@@ -84,7 +84,7 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
             nanosleep( &ts, NULL);
 
             //tutaj biodegraduje material
-            if ( i == 0 ) {
+            if ( i == 0  && actual_storage == 0) {
                 if ( clock_gettime( CLOCK_MONOTONIC, &last_check_time ) == -1 )
                     errorSend( "Error during get connect time" );
             }

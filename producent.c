@@ -12,19 +12,48 @@ int main( int argc, char *argv[] ) {
 
     int soc_fd = createServer( address, port );
 
-    int epoll_fd = createEpoll( soc_fd );
-
     int pipe_fd = forkProduce( speed );
 
-    //TODO: timer
+    int epoll_fd = createEpoll( soc_fd );
 
-    handleConnection( soc_fd, epoll_fd, pipe_fd, speed );
+    int timer_fd = createTimer( epoll_fd );
+
+    handleConnection( soc_fd, epoll_fd, pipe_fd, timer_fd, speed );
 
     close( soc_fd );
+    close( timer_fd );
     close( epoll_fd );
     close( pipe_fd );
 
     return 0;
+}
+
+int createTimer( int epoll_fd ) {
+    int timer_fd = timerfd_create( CLOCK_MONOTONIC, TFD_NONBLOCK );
+    if ( timer_fd == -1 ) {
+        printf( "Can't create timer\n" );
+        exit( EXIT_FAILURE );
+    }
+    struct itimerspec ts;
+    ts.it_value.tv_sec = 5;
+    ts.it_value.tv_nsec = 0;
+    ts.it_interval.tv_sec = 5;
+    ts.it_interval.tv_nsec = 0;
+    if ( timerfd_settime( timer_fd, 0, &ts, NULL) < 0 ) {
+        printf( "Can't set timer\n" );
+        exit( EXIT_FAILURE );
+    }
+
+    struct epoll_event ev = {};
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = timer_fd;
+
+    if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev ) == -1 ) {
+        perror( "Can't add timer descriptor to epoll" );
+        exit( EXIT_FAILURE );
+    }
+
+    return timer_fd;
 }
 
 int forkProduce( float rate ) {
@@ -63,7 +92,7 @@ void produce( int pipe, float rate ) {
             data[ i ] = current_char;
         }
 
-        //TODO: sprawdz czy pip nie jest pelny
+        //TODO: sprawdz czy pip nie jest pelny // To chyba jest nie potrzebne
 
         int write_data = write( pipe, data, 640 );
         if ( write_data == -1 ) {
@@ -186,7 +215,7 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     }
 }
 
-void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, float rate ) {
+void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, float rate ) {
     int timeout = ( int ) (( 640 / ( rate * 2662 )) * 1e3 ); //production rate in ms for epoll timeout
 
     int ready, nbytes;
@@ -225,6 +254,14 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, float rate ) {
                 printf( "New client properly connected\n" );
 
             }
+            else if ( evlist[ i ].data.fd == timer_fd && evlist[ i ].events & EPOLLIN ) {
+                uint64_t tempbuf;
+                if ( read( timer_fd, &tempbuf, sizeof( tempbuf )) == -1 ) {
+                    printf( "err read\n" );
+                }
+                //TODO: Print report
+                //fprintf( stderr, "Ilosc klientow: %d\n", );
+            }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 printf( "Client disconnecting\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
@@ -238,7 +275,6 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, float rate ) {
             }
         }
     }
-
     free( quote );
     free( evlist );
 }
@@ -253,7 +289,7 @@ int createEpoll( int soc_fd ) {
     struct epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = soc_fd;
-    //ev.data.u32 = 15;
+
     if ( epoll_ctl( epoll_fd, EPOLL_CTL_ADD, soc_fd, &ev ) == -1 ) {
         perror( "Can't add descriptor to epoll" );
         exit( EXIT_FAILURE );

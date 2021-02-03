@@ -41,7 +41,9 @@ int forkProduce( float rate );
 
 void produce( int pipe, float rate );
 
-void handleConnection( int soc_fd, int epoll_fd, int pip_fd, float rate );
+int createTimer( int epoll_fd );
+
+void handleConnection( int soc_fd, int epoll_fd, int pip_fd, int timer_fd, float rate );
 
 void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote );
 

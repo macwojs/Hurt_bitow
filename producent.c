@@ -4,7 +4,6 @@ typedef struct sockaddr sockaddr;
 long long reserved_data = 0;
 int client_count = 0;
 int last_data_status = 0;
-int data_send = 0;
 
 
 int main( int argc, char *argv[] ) {
@@ -96,8 +95,6 @@ void produce( int pipe, float rate ) {
             data[ i ] = current_char;
         }
 
-        //TODO: sprawdz czy pip nie jest pelny // To chyba jest nie potrzebne
-
         int write_data = write( pipe, data, 640 );
         if ( write_data == -1 ) {
             if ( errno == EPIPE ) {
@@ -182,8 +179,6 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
         data->data_to_send = 0;
 
 
-    data_send += data->data_to_send;
-
     if ( data->data_to_send > 0 ) {
         char read_buffer[data->data_to_send];
         if ( read( pipe_fd, read_buffer, sizeof( read_buffer )) == -1 ) {
@@ -222,7 +217,6 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
 
     //update events setting
     data->data_to_send -= SMALL_PACKAGE;
-    data_send += SMALL_PACKAGE;
 
     struct epoll_event ev = { 0 };
     ev.events = EPOLLOUT | EPOLLRDHUP;
@@ -282,8 +276,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
 
             }
             else if ( evlist[ i ].data.fd == timer_fd && evlist[ i ].events & EPOLLIN ) {
-                uint64_t tempbuf;
-                if ( read( timer_fd, &tempbuf, sizeof( tempbuf )) == -1 ) {
+                uint64_t temp_buf;
+                if ( read( timer_fd, &temp_buf, sizeof( temp_buf )) == -1 ) {
                     printf( "err read\n" );
                 }
                 struct timespec time_stamp;
@@ -297,9 +291,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
                 fprintf( stderr, "\t\t\t\t Ilosc klientow: %d\n", client_count );
                 fprintf( stderr, "\t\t\t\t Zajetość magazynu: %d (%.2f%%)\n", pipe_current,
                          ( float ) pipe_current / pipe_capacity * 100 );
-                fprintf( stderr, "\t\t\t\t Przeplyw: %d\n", ( pipe_current - last_data_status ) - data_send );
+                fprintf( stderr, "\t\t\t\t Przeplyw: %d\n", pipe_current - last_data_status );
                 last_data_status = pipe_current;
-                data_send = 0;
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 //printf( "Client disconnecting\n" );

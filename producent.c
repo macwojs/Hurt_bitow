@@ -2,6 +2,10 @@
 
 typedef struct sockaddr sockaddr;
 long long reserved_data = 0;
+int client_count = 0;
+int last_data_status = 0;
+int data_send = 0;
+
 
 int main( int argc, char *argv[] ) {
     char address[16] = "localhost";
@@ -142,7 +146,7 @@ void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote ) {
     }
 }
 
-void disconnectClient( socket_data *data, int epoll_fd ) {
+void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
     struct timespec time_stamp;
 
     struct sockaddr_in address = { 0 };
@@ -153,6 +157,7 @@ void disconnectClient( socket_data *data, int epoll_fd ) {
     }
 
     shutdown( data->fd, SHUT_RDWR );
+    client_count--;
 
     if ( epoll_ctl( epoll_fd, EPOLL_CTL_DEL, data->fd, NULL) == -1 ) {
         perror( "Can't remove descriptor from epoll" );
@@ -170,6 +175,16 @@ void disconnectClient( socket_data *data, int epoll_fd ) {
              time_stamp.tv_nsec );
     fprintf( stderr, "\t\t\t\t\t address: %s:%d\n", inet_ntoa( address.sin_addr ), ntohs( address.sin_port ));
     fprintf( stderr, "\t\t\t\t\t lost data: %d\n", data->data_to_send );
+
+    data_send += data->data_to_send;
+
+    if ( data->data_to_send > 0 ) {
+        char read_buffer[data->data_to_send];
+        if ( read( pipe_fd, read_buffer, sizeof( read_buffer )) == -1 ) {
+            perror( "Can't read data from pipe" );
+            exit( EXIT_FAILURE );
+        }
+    }
 
     free( data );
 }
@@ -200,6 +215,7 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
 
     //update events setting
     data->data_to_send -= SMALL_PACKAGE;
+    data_send += SMALL_PACKAGE;
 
     struct epoll_event ev = { 0 };
     ev.events = EPOLLOUT | EPOLLRDHUP;
@@ -211,7 +227,7 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     }
 
     if ( data->data_to_send == 0 ) {
-        disconnectClient( data, epoll_fd );
+        disconnectClient( data, epoll_fd, pipe_fd );
     }
 }
 
@@ -221,6 +237,9 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
     int ready, nbytes;
 
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
+
+    const size_t pipe_capacity = fcntl( pipe_fd, F_GETPIPE_SZ );
+    int pipe_current;
 
     list *quote = create();
 
@@ -250,6 +269,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
             if ( evlist[ i ].data.fd == soc_fd ) {
                 printf( "New client connected\n" );
                 int client_fd = accept( soc_fd, NULL, NULL);
+                client_count++;
                 connectNewClient( client_fd, epoll_fd, pipe_fd, quote );
                 printf( "New client properly connected\n" );
 
@@ -260,12 +280,25 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
                     printf( "err read\n" );
                 }
                 //TODO: Print report
-                //fprintf( stderr, "Ilosc klientow: %d\n", );
+                struct timespec time_stamp;
+                if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
+                    perror( "Error during get disconnect time" );
+                    exit( EXIT_FAILURE );
+                }
+                fprintf( stderr, "\n\nReport for time: %li sec, %li nsec\n", time_stamp.tv_sec,
+                         time_stamp.tv_nsec );
+                ioctl( pipe_fd, FIONREAD, &pipe_current );
+                fprintf( stderr, "\t\t\t\t Ilosc klientow: %d\n", client_count );
+                fprintf( stderr, "\t\t\t\t Zajetość magazynu: %d (%.2f%%)\n", pipe_current,
+                         ( float ) pipe_current / pipe_capacity * 100 );
+                fprintf( stderr, "\t\t\t\t Przeplyw: %d\n", ( pipe_current - last_data_status ) - data_send );
+                last_data_status = pipe_current;
+                data_send = 0;
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 printf( "Client disconnecting\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
-                disconnectClient( data, epoll_fd );
+                disconnectClient( data, epoll_fd, pipe_fd );
                 printf( "Client disconnected\n" );
             }
             else if ( evlist[ i ].events & EPOLLOUT ) {

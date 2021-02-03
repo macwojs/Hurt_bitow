@@ -6,6 +6,7 @@
 #include "parse.h"
 #include "list.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -49,7 +50,7 @@ void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote );
 
 void addToEpoll( int epoll_fd, int cl_fd );
 
-void disconnectClient( socket_data *data, int epoll_fd );
+void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd  );
 
 void sendData( socket_data *data, int epoll_fd, int pipe_fd );
 

@@ -171,10 +171,16 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
         exit( EXIT_FAILURE );
     }
 
-    fprintf( stderr, "Client disconnected  time: %li sec, %li nsec\n", time_stamp.tv_sec,
+    fprintf( stderr, "\nClient disconnected  time: %li sec, %li nsec\n", time_stamp.tv_sec,
              time_stamp.tv_nsec );
     fprintf( stderr, "\t\t\t\t\t address: %s:%d\n", inet_ntoa( address.sin_addr ), ntohs( address.sin_port ));
     fprintf( stderr, "\t\t\t\t\t lost data: %d\n", data->data_to_send );
+
+
+    //Znaczy, ze transmisja jednak nie ruszyla
+    if(data->data_to_send == SMALL_PACKAGE)
+        data->data_to_send = 0;
+
 
     data_send += data->data_to_send;
 
@@ -184,6 +190,7 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
             perror( "Can't read data from pipe" );
             exit( EXIT_FAILURE );
         }
+        reserved_data -= data->data_to_send;
     }
 
     free( data );
@@ -209,7 +216,7 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
         exit( EXIT_FAILURE );
     }
 
-    printf( "New data sent\n" );
+    //printf( "New data sent\n" );
 
     //TODO: sprawdz, czy wszystko sie wyslalo, a jak nie to czy klient nie umarla, a jak umarl to go usun i zrob raport
 
@@ -267,11 +274,11 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
 
         for ( int i = 0; i < ready; ++i ) {
             if ( evlist[ i ].data.fd == soc_fd ) {
-                printf( "New client connected\n" );
+                //printf( "New client connected\n" );
                 int client_fd = accept( soc_fd, NULL, NULL);
                 client_count++;
                 connectNewClient( client_fd, epoll_fd, pipe_fd, quote );
-                printf( "New client properly connected\n" );
+                //printf( "New client properly connected\n" );
 
             }
             else if ( evlist[ i ].data.fd == timer_fd && evlist[ i ].events & EPOLLIN ) {
@@ -279,13 +286,12 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
                 if ( read( timer_fd, &tempbuf, sizeof( tempbuf )) == -1 ) {
                     printf( "err read\n" );
                 }
-                //TODO: Print report
                 struct timespec time_stamp;
                 if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
                     perror( "Error during get disconnect time" );
                     exit( EXIT_FAILURE );
                 }
-                fprintf( stderr, "\n\nReport for time: %li sec, %li nsec\n", time_stamp.tv_sec,
+                fprintf( stderr, "\nReport for time: %li sec, %li nsec\n", time_stamp.tv_sec,
                          time_stamp.tv_nsec );
                 ioctl( pipe_fd, FIONREAD, &pipe_current );
                 fprintf( stderr, "\t\t\t\t Ilosc klientow: %d\n", client_count );
@@ -296,20 +302,18 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
                 data_send = 0;
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
-                printf( "Client disconnecting\n" );
+                //printf( "Client disconnecting\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
                 disconnectClient( data, epoll_fd, pipe_fd );
-                printf( "Client disconnected\n" );
+                //printf( "Client disconnected\n" );
             }
             else if ( evlist[ i ].events & EPOLLOUT ) {
-                printf( "New data request\n" );
+                //printf( "New data request\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
                 sendData( data, epoll_fd, pipe_fd );
             }
         }
     }
-    free( quote );
-    free( evlist );
 }
 
 int createEpoll( int soc_fd ) {

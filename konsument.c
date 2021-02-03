@@ -45,6 +45,7 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
     char buffer[SMALL_PACKAGE] = { 0 };
     while ( 1 ) {
         int soc_fd = connectToServer( address, port );
+        //printf("Connected\n");
 
         if ( clock_gettime( CLOCK_MONOTONIC, &connect_time ) == -1 ) {
             perror( "Error during get connect time" );
@@ -117,6 +118,7 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
             //Processing and degradation
             actual_storage += recv_result;
         }
+        //printf("Package of data downloaded\n");
 
         if ( storage - actual_storage < FULL_PACKAGE ) {
             socklen_t addr_size = sizeof( local_address );

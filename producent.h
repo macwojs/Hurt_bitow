@@ -44,13 +44,17 @@ void produce( int pipe, float rate );
 
 int createTimer( int epoll_fd );
 
+void timerReport( int timer_fd, int pipe_fd );
+
 void handleConnection( int soc_fd, int epoll_fd, int pip_fd, int timer_fd, float rate );
 
 void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote );
 
 void addToEpoll( int epoll_fd, int cl_fd );
 
-void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd  );
+void addFromQuote( int epoll_fd, list **quote, int pipe_fd );
+
+void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd );
 
 void sendData( socket_data *data, int epoll_fd, int pipe_fd );
 

@@ -175,7 +175,7 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
 
 
     //Znaczy, ze transmisja jednak nie ruszyla
-    if(data->data_to_send == SMALL_PACKAGE)
+    if ( data->data_to_send == SMALL_PACKAGE )
         data->data_to_send = 0;
 
 
@@ -232,29 +232,53 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     }
 }
 
+void addFromQuote( int epoll_fd, list **quote, int pipe_fd ) {
+    int nbytes;
+    ioctl( pipe_fd, FIONREAD, &nbytes );
+    if ( nbytes - reserved_data > 13312 ) {
+        for ( int i = 0; i < ( nbytes - reserved_data ) / 13312; i++ ) {
+            int fd = get( *quote );
+            if ( fd != -1 ) {
+                addToEpoll( epoll_fd, fd );
+                *quote = del( *quote );
+            }
+        }
+    }
+}
+
+void timerReport( int timer_fd, int pipe_fd ){
+    const size_t pipe_capacity = fcntl( pipe_fd, F_GETPIPE_SZ );
+    int pipe_current;
+    uint64_t temp_buf;
+    if ( read( timer_fd, &temp_buf, sizeof( temp_buf )) == -1 ) {
+        printf( "err read\n" );
+    }
+    struct timespec time_stamp;
+    if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
+        perror( "Error during get disconnect time" );
+        exit( EXIT_FAILURE );
+    }
+    fprintf( stderr, "\nReport for time: %li sec, %li nsec\n", time_stamp.tv_sec,
+             time_stamp.tv_nsec );
+    ioctl( pipe_fd, FIONREAD, &pipe_current );
+    fprintf( stderr, "\t\t\t\t Ilosc klientow: %d\n", client_count );
+    fprintf( stderr, "\t\t\t\t Zajetość magazynu: %d (%.2f%%)\n", pipe_current,
+             ( float ) pipe_current / pipe_capacity * 100 );
+    fprintf( stderr, "\t\t\t\t Przeplyw: %d\n", pipe_current - last_data_status );
+    last_data_status = pipe_current;
+}
+
 void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, float rate ) {
     int timeout = ( int ) (( 640 / ( rate * 2662 )) * 1e3 ); //production rate in ms for epoll timeout
 
-    int ready, nbytes;
+    int ready;
 
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
-
-    const size_t pipe_capacity = fcntl( pipe_fd, F_GETPIPE_SZ );
-    int pipe_current;
 
     list *quote = create();
 
     while ( 1 ) {
-        ioctl( pipe_fd, FIONREAD, &nbytes );
-        if ( nbytes - reserved_data > 13312 ) {
-            for ( int i = 0; i < ( nbytes - reserved_data ) / 13312; i++ ) {
-                int fd = get( quote );
-                if ( fd != -1 ) {
-                    addToEpoll( epoll_fd, fd );
-                    quote = del( quote );
-                }
-            }
-        }
+        addFromQuote( epoll_fd, &quote, pipe_fd );
 
         ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, timeout );
         if ( ready == -1 ) {
@@ -268,40 +292,18 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
 
         for ( int i = 0; i < ready; ++i ) {
             if ( evlist[ i ].data.fd == soc_fd ) {
-                //printf( "New client connected\n" );
                 int client_fd = accept( soc_fd, NULL, NULL);
                 client_count++;
                 connectNewClient( client_fd, epoll_fd, pipe_fd, quote );
-                //printf( "New client properly connected\n" );
-
             }
             else if ( evlist[ i ].data.fd == timer_fd && evlist[ i ].events & EPOLLIN ) {
-                uint64_t temp_buf;
-                if ( read( timer_fd, &temp_buf, sizeof( temp_buf )) == -1 ) {
-                    printf( "err read\n" );
-                }
-                struct timespec time_stamp;
-                if ( clock_gettime( CLOCK_REALTIME, &time_stamp ) == -1 ) {
-                    perror( "Error during get disconnect time" );
-                    exit( EXIT_FAILURE );
-                }
-                fprintf( stderr, "\nReport for time: %li sec, %li nsec\n", time_stamp.tv_sec,
-                         time_stamp.tv_nsec );
-                ioctl( pipe_fd, FIONREAD, &pipe_current );
-                fprintf( stderr, "\t\t\t\t Ilosc klientow: %d\n", client_count );
-                fprintf( stderr, "\t\t\t\t Zajetość magazynu: %d (%.2f%%)\n", pipe_current,
-                         ( float ) pipe_current / pipe_capacity * 100 );
-                fprintf( stderr, "\t\t\t\t Przeplyw: %d\n", pipe_current - last_data_status );
-                last_data_status = pipe_current;
+                timerReport(timer_fd, pipe_fd);
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
-                //printf( "Client disconnecting\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
                 disconnectClient( data, epoll_fd, pipe_fd );
-                //printf( "Client disconnected\n" );
             }
             else if ( evlist[ i ].events & EPOLLOUT ) {
-                //printf( "New data request\n" );
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
                 sendData( data, epoll_fd, pipe_fd );
             }

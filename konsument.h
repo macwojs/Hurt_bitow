@@ -4,6 +4,8 @@
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE 199309
 
+#define UNUSED(x) (void)(x)
+
 #include "parse.h"
 
 #include <time.h>

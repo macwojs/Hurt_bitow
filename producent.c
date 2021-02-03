@@ -44,7 +44,7 @@ int createTimer( int epoll_fd ) {
         exit( EXIT_FAILURE );
     }
 
-    struct epoll_event ev = {};
+    struct epoll_event ev = { 0 };
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = timer_fd;
 
@@ -79,10 +79,10 @@ int forkProduce( float rate ) {
 }
 
 void produce( int pipe, float rate ) {
-    char data[640] = {};
+    char data[640] = { 0 };
     char current_char = 'a';
 
-    struct timespec ts = {};
+    struct timespec ts = { 0 };
     size_t sleep_ns = 640 / ( rate * 2662 ) * 1e9;
     ts.tv_sec = sleep_ns / 1e9;
     ts.tv_nsec = sleep_ns % ( size_t ) ( 1e9 );
@@ -115,7 +115,7 @@ void produce( int pipe, float rate ) {
 }
 
 void addToEpoll( int epoll_fd, int cl_fd ) {
-    struct epoll_event ev = {};
+    struct epoll_event ev = { 0 };
 
     ev.events = EPOLLOUT | EPOLLRDHUP;
 
@@ -179,7 +179,7 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
         reserved_data += FULL_PACKAGE;
     }
 
-    char read_buffer[SMALL_PACKAGE] = {};
+    char read_buffer[SMALL_PACKAGE] = { 0 };
     int read_pipe = read( pipe_fd, read_buffer, sizeof( read_buffer ));
     if ( read_pipe == -1 ) {
         perror( "Can't read data from pipe" );
@@ -201,7 +201,7 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     //update events setting
     data->data_to_send -= SMALL_PACKAGE;
 
-    struct epoll_event ev = {};
+    struct epoll_event ev = { 0 };
     ev.events = EPOLLOUT | EPOLLRDHUP;
     ev.data.ptr = data;
 
@@ -286,7 +286,7 @@ int createEpoll( int soc_fd ) {
         exit( EXIT_FAILURE );
     }
 
-    struct epoll_event ev = {};
+    struct epoll_event ev = { 0 };
     ev.events = EPOLLIN;
     ev.data.fd = soc_fd;
 

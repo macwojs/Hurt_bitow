@@ -23,7 +23,7 @@ int main( int argc, char *argv[] ) {
     fprintf( stderr, "Finish time %li sec, %li nsec\n", finish_time.tv_sec, finish_time.tv_nsec );
     fprintf( stderr, "Address: %s:%d\n", inet_ntoa( local_address.sin_addr ),
              ntohs( local_address.sin_port ));
-    fprintf( stderr, "Process pid: %d\n", getpid() );
+    fprintf( stderr, "Process pid: %d\n", getpid());
 
 
     return 0;
@@ -38,11 +38,11 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
     struct timespec first_package_time;
     struct timespec last_package_time;
 
-    struct timespec ts = {};
+    struct timespec ts = { 0 };
 
     long long storage = capacity * STORAGE;
     long long actual_storage = 0;
-    char buffer[SMALL_PACKAGE] = {};
+    char buffer[SMALL_PACKAGE] = { 0 };
     while ( 1 ) {
         int soc_fd = connectToServer( address, port );
 
@@ -131,6 +131,7 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
 }
 
 void on_exit_report( int status, void *dn ) {
+    UNUSED(status);
     report *data = ( report * ) dn;
     if ( data->a->tv_nsec < 0 ) {
         data->a->tv_sec -= 1;

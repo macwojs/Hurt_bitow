@@ -1,34 +1,50 @@
 #include "konsument.h"
 
-typedef struct timespec timespec;
-struct sockaddr_in local_address;
-
 int main( int argc, char *argv[] ) {
     char address[16] = "localhost";
     uint16_t port;
     int capacity;
     float download_speed;
     float degradation_speed;
+    struct sockaddr_in local_address;
 
     readInput( argc, argv, address, &port, &capacity, &download_speed, &degradation_speed );
 
-    getData( capacity, download_speed, degradation_speed, address, port );
+    getData( capacity, download_speed, degradation_speed, address, port, &local_address );
 
+    sendReport( &local_address );
+
+    return 0;
+}
+
+void sendReport( struct sockaddr_in *local_address ) {
     struct timespec finish_time;
     if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 )
         errorSend( "Error during get finish time" );
 
     fprintf( stderr, "Finish time %li sec, %li nsec\n", finish_time.tv_sec, finish_time.tv_nsec );
-    fprintf( stderr, "Address: %s:%d\n", inet_ntoa( local_address.sin_addr ),
-             ntohs( local_address.sin_port ));
+    fprintf( stderr, "Address: %s:%d\n", inet_ntoa( local_address->sin_addr ),
+             ntohs( local_address->sin_port ));
     fprintf( stderr, "Process pid: %d\n", getpid());
-
-
-    return 0;
 }
 
+void
+generateReport( struct timespec connect_time, struct timespec first_package_time, struct timespec last_package_time ) {
+    report *report_data = ( report * ) calloc( 1, sizeof( report ));
+    report_data->a = ( struct timespec * ) calloc( 1, sizeof( struct timespec ));
+    report_data->b = ( struct timespec * ) calloc( 1, sizeof( struct timespec ));
 
-int getData( int capacity, float download_speed, float degradation_speed, char *address, uint16_t port ) {
+    report_data->a->tv_sec = first_package_time.tv_sec - connect_time.tv_sec;
+    report_data->a->tv_nsec = first_package_time.tv_nsec - connect_time.tv_nsec;
+
+    report_data->b->tv_sec = last_package_time.tv_sec - first_package_time.tv_sec;
+    report_data->b->tv_nsec = last_package_time.tv_nsec - first_package_time.tv_nsec;
+
+    on_exit( on_exit_report, ( void * ) report_data );
+}
+
+int getData( int capacity, float download_speed, float degradation_speed, char *address, uint16_t port,
+             struct sockaddr_in *local_address ) {
     struct timespec last_check_time;
     struct timespec now_time;
 
@@ -37,6 +53,9 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
     struct timespec last_package_time;
 
     struct timespec ts = { 0 };
+    size_t sleep_ns = SMALL_PACKAGE / ( download_speed * 4435 ) * 1e9;
+    ts.tv_sec = sleep_ns / 1e9;
+    ts.tv_nsec = sleep_ns % ( size_t ) ( 1e9 );
 
     long long storage = capacity * STORAGE;
     long long actual_storage = 0;
@@ -55,36 +74,19 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
             if ( recv_result == -1 )
                 errorSend( "Cant read data from server" );
 
-            if ( i == 0 ) {
+            if ( i == 0 )
                 if ( clock_gettime( CLOCK_MONOTONIC, &first_package_time ) == -1 )
                     errorSend( "Error during get connect time" );
-            }
 
-            if ( i == 3 ) {
+            if ( i == 3 )
                 if ( clock_gettime( CLOCK_MONOTONIC, &last_package_time ) == -1 )
                     errorSend( "Error during get connect time" );
 
-                report *report_data = ( report * ) calloc( 1, sizeof( report ));
-                report_data->a = ( timespec * ) calloc( 1, sizeof( timespec ));
-                report_data->b = ( timespec * ) calloc( 1, sizeof( timespec ));
-
-                report_data->a->tv_sec = first_package_time.tv_sec - connect_time.tv_sec;
-                report_data->a->tv_nsec = first_package_time.tv_nsec - connect_time.tv_nsec;
-
-                report_data->b->tv_sec = last_package_time.tv_sec - first_package_time.tv_sec;
-                report_data->b->tv_nsec = last_package_time.tv_nsec - first_package_time.tv_nsec;
-
-                on_exit( on_exit_report, ( void * ) report_data );
-            }
-
             //process data
-            size_t sleep_ns = SMALL_PACKAGE / ( download_speed * 4435 ) * 1e9;
-            ts.tv_sec = sleep_ns / 1e9;
-            ts.tv_nsec = sleep_ns % ( size_t ) ( 1e9 );
             nanosleep( &ts, NULL);
 
             //tutaj biodegraduje material
-            if ( i == 0  && actual_storage == 0) {
+            if ( i == 0 && actual_storage == 0 ) {
                 if ( clock_gettime( CLOCK_MONOTONIC, &last_check_time ) == -1 )
                     errorSend( "Error during get connect time" );
             }
@@ -105,10 +107,11 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
             actual_storage += recv_result;
         }
 
-        if ( storage - actual_storage < FULL_PACKAGE ) {
-            socklen_t addr_size = sizeof( local_address );
-            getsockname( soc_fd, &local_address, &addr_size );
+        generateReport( connect_time, first_package_time, last_package_time );
 
+        if ( storage - actual_storage < FULL_PACKAGE ) {
+            socklen_t addr_size = sizeof( *local_address );
+            getsockname( soc_fd, ( struct sockaddr * ) local_address, &addr_size );
             close( soc_fd );
             return 0;
         }
@@ -148,7 +151,7 @@ int connectToServer( char *address, uint16_t port ) {
     if ( inet_aton( address, &addr.sin_addr ) == -1 )
         errorSend( "Error during parsing address" );
 
-    if ( connect( client_socket, &addr, sizeof( addr )) == -1 )
+    if ( connect( client_socket, ( struct sockaddr * ) &addr, sizeof( addr )) == -1 )
         errorSend( "Error during connecting to server" );
 
     return client_socket;
@@ -158,7 +161,7 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, int *capac
                float *degradation_speed ) {
     char c;
     while ( optind < argc ) {
-        if (( c = getopt( argc, argv, "c:p:d:" )) != -1 ) {
+        if (( c = (char)getopt( argc, argv, "c:p:d:" )) != -1 ) {
             switch ( c ) {
                 case 'c':
                     *capacity = parseInt( optarg );
@@ -168,6 +171,8 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, int *capac
                     break;
                 case 'd':
                     *degradation_speed = parseFloat( optarg );
+                    break;
+                default:
                     break;
             }
         }

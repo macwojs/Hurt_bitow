@@ -1,10 +1,4 @@
-#ifndef HURT_BITOW_KONSUMENT_H
-#define HURT_BITOW_KONSUMENT_H
-
-#define _GNU_SOURCE
-#define _POSIX_C_SOURCE 199309
-
-#define UNUSED(x) (void)(x)
+#define UNUSED( x ) (void)(x)
 
 #include "parse.h"
 
@@ -25,7 +19,13 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, int *capac
 
 int connectToServer( char *address, uint16_t port );
 
-int getData( int capacity, float download_speed, float degradation_speed,  char *address, uint16_t port );
+int getData( int capacity, float download_speed, float degradation_speed, char *address, uint16_t port,
+             struct sockaddr_in * );
+
+void sendReport( struct sockaddr_in * );
+
+void
+generateReport( struct timespec connect_time, struct timespec first_package_time, struct timespec last_package_time );
 
 void on_exit_report( int status, void *dn );
 
@@ -35,5 +35,3 @@ typedef struct report {
     struct timespec *a;
     struct timespec *b;
 } report;
-
-#endif //HURT_BITOW_KONSUMENT_H

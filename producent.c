@@ -156,15 +156,6 @@ void disconnectClient( socket_data *data, int epoll_fd, int pipe_fd ) {
     fprintf( stderr, "\t\t\t\t\t address: %s:%d\n", inet_ntoa( address.sin_addr ), ntohs( address.sin_port ));
     fprintf( stderr, "\t\t\t\t\t lost data: %d\n", data->data_to_send );
 
-
-    //Znaczy, ze transmisja jednak nie ruszyla
-    if ( data->data_to_send == SMALL_PACKAGE )
-        data->data_to_send = 0;
-
-    //znaczy, ze transmisja ruszyla, ale nic nie wyslala
-    if ( data->data_to_send == -1 )
-        data->data_to_send = SMALL_PACKAGE;
-
     if ( data->data_to_send > 0 ) {
         char read_buffer[data->data_to_send];
         if ( read( pipe_fd, read_buffer, sizeof( read_buffer )) == -1 )
@@ -189,15 +180,10 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
     reserved_data -= SMALL_PACKAGE; //Pobralismy dane z pipe, wiec jak znikna to sie zmarnuja
 
     int write_sock = write( data->fd, read_buffer, sizeof( read_buffer ));
-    if ( write_sock == -1 ) {
-        data->data_to_send = -1; //failed without send any data but after sending start
+    if ( write_sock == -1 )
         disconnectClient( data, epoll_fd, pipe_fd );
-    }
-    errorSend( "Can't send data to client pipe" );
 
     //printf( "New data sent\n" );
-
-    //TODO: sprawdz, czy wszystko sie wyslalo, a jak nie to czy klient nie umarla, a jak umarl to go usun i zrob raport
 
     //update events setting
     data->data_to_send -= SMALL_PACKAGE;
@@ -280,6 +266,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
+                if(data->data_to_send == FULL_PACKAGE)  //transmisja sie nie rozpoczela, wiec dane nie zostaly utracone
+                    data->data_to_send = 0;
                 disconnectClient( data, epoll_fd, pipe_fd );
             }
             else if ( evlist[ i ].events & EPOLLOUT ) {

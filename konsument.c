@@ -21,10 +21,10 @@ void sendReport( struct sockaddr_in *local_address ) {
     struct timespec finish_time;
     if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 )
         errorSend( "Error during get finish time" );
-//
-//    fprintf( stderr, "Finish time %li sec, %li nsec\t Address: %s:%d\t PID: %d\n",
-//             finish_time.tv_sec, finish_time.tv_nsec, inet_ntoa( local_address->sin_addr ),
-//             ntohs( local_address->sin_port), getpid());
+
+    fprintf( stderr, "\nFinish time %li sec, %li nsec\t Address: %s:%d\t PID: %d\n",
+             finish_time.tv_sec, finish_time.tv_nsec, inet_ntoa( local_address->sin_addr ),
+             ntohs( local_address->sin_port ), getpid());
 }
 
 void

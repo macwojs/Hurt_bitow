@@ -20,7 +20,7 @@ int main( int argc, char *argv[] ) {
 
     int timer_fd = createTimer( epoll_fd );
 
-    handleConnection( soc_fd, epoll_fd, pipe_fd, timer_fd, speed );
+    handleConnection( soc_fd, epoll_fd, pipe_fd, timer_fd );
 
     close( soc_fd );
     close( timer_fd );
@@ -124,7 +124,7 @@ void addToEpoll( int epoll_fd, int cl_fd ) {
 void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote ) {
     int nbytes = 0;
     ioctl( pipe_fd, FIONREAD, &nbytes );
-    if ( nbytes - reserved_data > 13312 ) {
+    if ( nbytes - reserved_data > 13312 && quote->value == -1 ) {
         addToEpoll( epoll_fd, cl_fd );
     }
     else {
@@ -235,9 +235,7 @@ void timerReport( int timer_fd, int pipe_fd ) {
     last_data_status = pipe_current;
 }
 
-void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, float rate ) {
-    int timeout = ( int ) (( 640 / ( rate * 2662 )) * 1e3 ); //production rate in ms for epoll timeout
-
+void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd ) {
     int ready;
 
     struct epoll_event *evlist = calloc(EPOLL_WAIT_LIMIT, sizeof( struct epoll_event ));
@@ -247,7 +245,7 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
     while ( 1 ) {
         addFromQuote( epoll_fd, &quote, pipe_fd );
 
-        ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, timeout );
+        ready = epoll_wait( epoll_fd, evlist, EPOLL_WAIT_LIMIT, 0 );
         if ( ready == -1 ) {
             if ( errno == EINTR )
                 continue;
@@ -266,7 +264,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd, floa
             }
             else if ( evlist[ i ].events & EPOLLRDHUP ) {
                 struct socket_data *data = ( struct socket_data * ) evlist[ i ].data.ptr;
-                if(data->data_to_send == FULL_PACKAGE)  //transmisja sie nie rozpoczela, wiec dane nie zostaly utracone
+                if ( data->data_to_send ==
+                     FULL_PACKAGE )  //transmisja sie nie rozpoczela, wiec dane nie zostaly utracone
                     data->data_to_send = 0;
                 disconnectClient( data, epoll_fd, pipe_fd );
             }

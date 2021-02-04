@@ -74,20 +74,20 @@ int forkProduce( float rate ) {
 }
 
 void produce( int pipe, float rate ) {
-    char data[640] = { 0 };
+    char data[BLOCK] = { 0 };
     char current_char = 'a';
 
     struct timespec ts = { 0 };
-    size_t sleep_ns = 640 / ( rate * 2662 ) * 1e9;
+    size_t sleep_ns = BLOCK / ( rate * 2662 ) * 1e9;
     ts.tv_sec = sleep_ns / 1e9;
     ts.tv_nsec = sleep_ns % ( size_t ) ( 1e9 );
 
     for ( ;; ) {
-        for ( size_t i = 0; i < 640; ++i ) {
+        for ( size_t i = 0; i < BLOCK; ++i ) {
             data[ i ] = current_char;
         }
 
-        int write_data = write( pipe, data, 640 );
+        int write_data = write( pipe, data, BLOCK );
         if ( write_data == -1 ) {
             if ( errno == EPIPE ) {
                 return;
@@ -124,7 +124,7 @@ void addToEpoll( int epoll_fd, int cl_fd ) {
 void connectNewClient( int cl_fd, int epoll_fd, int pipe_fd, list *quote ) {
     int nbytes = 0;
     ioctl( pipe_fd, FIONREAD, &nbytes );
-    if ( nbytes - reserved_data > 13312 && quote->value == -1 ) {
+    if ( nbytes - reserved_data > FULL_PACKAGE && quote->value == -1 ) {
         addToEpoll( epoll_fd, cl_fd );
     }
     else {
@@ -203,8 +203,8 @@ void sendData( socket_data *data, int epoll_fd, int pipe_fd ) {
 void addFromQuote( int epoll_fd, list **quote, int pipe_fd ) {
     int nbytes;
     ioctl( pipe_fd, FIONREAD, &nbytes );
-    if ( nbytes - reserved_data > 13312 ) {
-        for ( int i = 0; i < ( nbytes - reserved_data ) / 13312; i++ ) {
+    if ( nbytes - reserved_data > FULL_PACKAGE ) {
+        for ( int i = 0; i < ( nbytes - reserved_data ) / FULL_PACKAGE; i++ ) {
             int fd = get( *quote );
             if ( fd != -1 ) {
                 addToEpoll( epoll_fd, fd );

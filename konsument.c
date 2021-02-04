@@ -22,10 +22,9 @@ void sendReport( struct sockaddr_in *local_address ) {
     if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 )
         errorSend( "Error during get finish time" );
 
-    fprintf( stderr, "Finish time %li sec, %li nsec\n", finish_time.tv_sec, finish_time.tv_nsec );
-    fprintf( stderr, "Address: %s:%d\n", inet_ntoa( local_address->sin_addr ),
-             ntohs( local_address->sin_port ));
-    fprintf( stderr, "Process pid: %d\n", getpid());
+    fprintf( stderr, "Finish time %li sec, %li nsec\t Address: %s:%d\t PID: %d\n",
+             finish_time.tv_sec, finish_time.tv_nsec, inet_ntoa( local_address->sin_addr ),
+             ntohs( local_address->sin_port), getpid());
 }
 
 void
@@ -133,10 +132,8 @@ void on_exit_report( int status, void *dn ) {
         data->b->tv_nsec = 1e9 - data->a->tv_nsec;
     }
 
-    fprintf( stderr, "\n\nDelay between connect and first package: %li sec and %li nsec\n", data->a->tv_sec,
-             data->a->tv_nsec );
-    fprintf( stderr, "Delay between first package and last package: %li sec and %li nsec\n", data->b->tv_sec,
-             data->b->tv_nsec );
+    fprintf( stderr, "Delay: %li sec and %li nsec\t Time: %li sec and %li nsec\n",
+             data->a->tv_sec, data->a->tv_nsec, data->b->tv_sec, data->b->tv_nsec );
 }
 
 int connectToServer( char *address, uint16_t port ) {

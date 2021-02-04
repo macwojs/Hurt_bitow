@@ -21,10 +21,10 @@ void sendReport( struct sockaddr_in *local_address ) {
     struct timespec finish_time;
     if ( clock_gettime( CLOCK_REALTIME, &finish_time ) == -1 )
         errorSend( "Error during get finish time" );
-
-    fprintf( stderr, "Finish time %li sec, %li nsec\t Address: %s:%d\t PID: %d\n",
-             finish_time.tv_sec, finish_time.tv_nsec, inet_ntoa( local_address->sin_addr ),
-             ntohs( local_address->sin_port), getpid());
+//
+//    fprintf( stderr, "Finish time %li sec, %li nsec\t Address: %s:%d\t PID: %d\n",
+//             finish_time.tv_sec, finish_time.tv_nsec, inet_ntoa( local_address->sin_addr ),
+//             ntohs( local_address->sin_port), getpid());
 }
 
 void
@@ -95,7 +95,7 @@ int getData( int capacity, float download_speed, float degradation_speed, char *
 
                 double deg = ( double ) now_time.tv_sec - ( double ) last_check_time.tv_sec +
                              ( double ) ( now_time.tv_nsec - last_check_time.tv_nsec ) * 1e-9;
-                int degraded_data = ( int ) ( deg * degradation_speed );
+                int degraded_data = ( int ) ( deg * degradation_speed * 819 );
                 actual_storage -= degraded_data;
 
                 last_check_time.tv_sec = now_time.tv_sec;
@@ -158,7 +158,7 @@ int readInput( int argc, char *argv[], char *address, uint16_t *port, int *capac
                float *degradation_speed ) {
     char c;
     while ( optind < argc ) {
-        if (( c = (char)getopt( argc, argv, "c:p:d:" )) != -1 ) {
+        if (( c = ( char ) getopt( argc, argv, "c:p:d:" )) != -1 ) {
             switch ( c ) {
                 case 'c':
                     *capacity = parseInt( optarg );

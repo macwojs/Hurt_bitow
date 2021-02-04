@@ -129,7 +129,7 @@ void on_exit_report( int status, void *dn ) {
 
     if ( data->b->tv_nsec < 0 ) {
         data->b->tv_sec -= 1;
-        data->b->tv_nsec = 1e9 - data->a->tv_nsec;
+        data->b->tv_nsec = 1e9 - data->b->tv_nsec;
     }
 
     fprintf( stderr, "Delay: %li sec and %li nsec\t Time: %li sec and %li nsec\n",

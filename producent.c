@@ -229,7 +229,7 @@ void timerReport( int timer_fd, int pipe_fd ) {
              time_stamp.tv_nsec );
     ioctl( pipe_fd, FIONREAD, &pipe_current );
     fprintf( stderr, "\t\t\t\t Ilosc klientow: %d\n", client_count );
-    fprintf( stderr, "\t\t\t\t Zajetość magazynu: %d (%.2f%%)\n", pipe_current,
+    fprintf( stderr, "\t\t\t\t Zajetosc magazynu: %d (%.2f%%)\n", pipe_current,
              ( float ) pipe_current / pipe_capacity * 100 );
     fprintf( stderr, "\t\t\t\t Przeplyw: %d\n", pipe_current - last_data_status );
     last_data_status = pipe_current;

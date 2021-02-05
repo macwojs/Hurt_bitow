@@ -250,6 +250,8 @@ void handleConnection( int soc_fd, int epoll_fd, int pipe_fd, int timer_fd ) {
             else
                 errorSend( "Error during epoll wait" );
         }
+        if (ready == 0)
+            continue;
 
         for ( int i = 0; i < ready; ++i ) {
             if ( evlist[ i ].data.fd == soc_fd ) {

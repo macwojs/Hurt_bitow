@@ -302,10 +302,12 @@ int createServer( char *address, uint16_t port ) {
     memset( &addr, 0, sizeof( struct sockaddr_in ));
     addr.sin_port = htons( port );
     addr.sin_family = AF_INET;
-    int res = inet_aton( address, &addr.sin_addr );
-
-    if ( res == -1 )
-        errorSend( "Error int inet_aton" );
+    if(strcmp(address, "localhost") == 0)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    else{
+        if(inet_pton(AF_INET, address, &addr.sin_addr )==0)
+            errorSend( "Can't parse ip" );
+    }
 
     if ( bind( serverSocket, ( struct sockaddr * ) &addr, sizeof( struct sockaddr_in )) == -1 )
         errorSend( "Can't bind server socket" );
